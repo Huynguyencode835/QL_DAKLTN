@@ -1,0 +1,696 @@
+{
+  "_comment": "=== DỮ LIỆU TEST CHO CÁC API ===",
+  "_note": "Chạy seed.py trước để tạo user: student1, lecturer1, staff1, admin",
+
+  "auth": {
+    "_comment": "Lấy access_token trước khi gọi các API khác",
+    "oauth_token_url": "POST /o/token/",
+    "body": {
+      "grant_type": "password",
+      "client_id": "...",
+      "client_secret": "...",
+      "username": "student1",
+      "password": "Student@123"
+    },
+    "accounts": {
+      "student": { "username": "student1", "password": "Student@123" },
+      "lecturer": { "username": "lecturer1", "password": "Lecturer@123" },
+      "staff":   { "username": "staff1",   "password": "Staff@123" },
+      "admin":   { "username": "admin",    "password": "Admin@123" }
+    }
+  },
+
+  "user": {
+    "_comment": "=== API USER ===",
+    "profile": {
+      "_api": "GET /api/users/profile/",
+      "_auth": "user đã đăng nhập (role nào cũng được)",
+      "_note": "Trả về thông tin user + profile theo role. Faculty nằm ở user, không còn trong profile.",
+      "_response_example_student": {
+        "id": 2,
+        "username": "student1",
+        "email": "student1@ou.edu.vn",
+        "first_name": "Nguyễn Văn",
+        "last_name": "An",
+        "role": "student",
+        "phone_number": "0901000001",
+        "avatar": null,
+        "dob": "2002-05-15",
+        "faculty": { "id": 1, "name": "Công nghệ thông tin" },
+        "profile": {
+          "student_id": "31210001",
+          "class_name": "DHCNTT19A",
+          "training_type": "regular",
+          "program_type": "standard",
+          "academic_year": "2021-2025",
+          "gpa": "3.45",
+          "conduct_score": 90,
+          "major": { "id": 1, "major_name": "Kỹ thuật phần mềm" }
+        }
+      },
+      "_response_example_lecturer": {
+        "id": 3,
+        "username": "lecturer1",
+        "email": "lecturer1@ou.edu.vn",
+        "first_name": "Trần Thị",
+        "last_name": "Bình",
+        "role": "lecturer",
+        "phone_number": "0902000001",
+        "avatar": null,
+        "dob": "1985-08-20",
+        "faculty": { "id": 1, "name": "Công nghệ thông tin" },
+        "profile": {
+          "academic_degree": "Tiến sĩ",
+          "position": "Trưởng bộ môn",
+          "specializations": [
+            { "id": 1, "name": "Khoa học máy tính", "faculty": 1 }
+          ]
+        }
+      }
+    }
+  },
+
+  "lecturers": {
+    "_comment": "=== API GIẢNG VIÊN ===",
+
+    "list_lecturers": {
+      "_api": "GET /api/lecturers/?faculty=1",
+      "_auth": "authenticated user",
+      "_note": "Danh sách giảng viên (lọc theo khoa nếu có query param faculty).",
+      "_response_example": [
+        {
+          "id": 3,
+          "full_name": "Trần Thị Bình",
+          "faculty": { "id": 1, "name": "Công nghệ thông tin" }
+        },
+        {
+          "id": 4,
+          "full_name": "Nguyễn Hoàng Long",
+          "faculty": { "id": 1, "name": "Công nghệ thông tin" }
+        },
+        {
+          "id": 5,
+          "full_name": "Lê Minh Quân",
+          "faculty": { "id": 1, "name": "Công nghệ thông tin" }
+        },
+        {
+          "id": 6,
+          "full_name": "Hoàng Thị Lan",
+          "faculty": { "id": 1, "name": "Công nghệ thông tin" }
+        },
+        {
+          "id": 7,
+          "full_name": "Võ Văn Tuấn",
+          "faculty": { "id": 2, "name": "Kinh tế - Quản trị kinh doanh" }
+        }
+      ]
+    },
+
+    "retrieve_lecturer": {
+      "_api": "GET /api/lecturers/3/",
+      "_auth": "authenticated user",
+      "_note": "Chi tiết giảng viên (bao gồm lecturer_profile và specializations).",
+      "_response_example": {
+        "id": 3,
+        "username": "lecturer1",
+        "email": "lecturer1@ou.edu.vn",
+        "full_name": "Trần Thị Bình",
+        "first_name": "Trần Thị",
+        "last_name": "Bình",
+        "phone_number": "0902000001",
+        "avatar": null,
+        "dob": "1985-08-20",
+        "faculty": { "id": 1, "name": "Công nghệ thông tin" },
+        "lecturer_profile": {
+          "academic_degree": "Tiến sĩ",
+          "position": "Trưởng bộ môn",
+          "specializations": [
+            { "id": 1, "name": "Khoa học máy tính", "faculty": 1 },
+            { "id": 2, "name": "Công nghệ phần mềm", "faculty": 1 }
+          ]
+        }
+      }
+    },
+
+    "retrieve_lecturer_2": {
+      "_api": "GET /api/lecturers/4/",
+      "_auth": "authenticated user",
+      "_response_example": {
+        "id": 4,
+        "username": "lecturer2",
+        "email": "lecturer2@ou.edu.vn",
+        "full_name": "Nguyễn Hoàng Long",
+        "first_name": "Nguyễn Hoàng",
+        "last_name": "Long",
+        "phone_number": "0902000002",
+        "avatar": null,
+        "dob": "1980-03-10",
+        "faculty": { "id": 1, "name": "Công nghệ thông tin" },
+        "lecturer_profile": {
+          "academic_degree": "Tiến sĩ",
+          "position": "Giảng viên chính",
+          "specializations": [
+            { "id": 3, "name": "Trí tuệ nhân tạo", "faculty": 1 }
+          ]
+        }
+      }
+    },
+
+    "retrieve_lecturer_3": {
+      "_api": "GET /api/lecturers/5/",
+      "_auth": "authenticated user",
+      "_response_example": {
+        "id": 5,
+        "username": "lecturer3",
+        "email": "lecturer3@ou.edu.vn",
+        "full_name": "Lê Minh Quân",
+        "first_name": "Lê Minh",
+        "last_name": "Quân",
+        "phone_number": "0902000003",
+        "avatar": null,
+        "dob": "1990-07-22",
+        "faculty": { "id": 1, "name": "Công nghệ thông tin" },
+        "lecturer_profile": {
+          "academic_degree": "Thạc sĩ",
+          "position": "Giảng viên",
+          "specializations": [
+            { "id": 2, "name": "Công nghệ phần mềm", "faculty": 1 }
+          ]
+        }
+      }
+    },
+
+    "retrieve_lecturer_4": {
+      "_api": "GET /api/lecturers/6/",
+      "_auth": "authenticated user",
+      "_response_example": {
+        "id": 6,
+        "username": "lecturer4",
+        "email": "lecturer4@ou.edu.vn",
+        "full_name": "Hoàng Thị Lan",
+        "first_name": "Hoàng Thị",
+        "last_name": "Lan",
+        "phone_number": "0902000004",
+        "avatar": null,
+        "dob": "1978-11-05",
+        "faculty": { "id": 1, "name": "Công nghệ thông tin" },
+        "lecturer_profile": {
+          "academic_degree": "Phó giáo sư - Tiến sĩ",
+          "position": "Phó trưởng khoa",
+          "specializations": [
+            { "id": 1, "name": "Khoa học máy tính", "faculty": 1 },
+            { "id": 3, "name": "Trí tuệ nhân tạo", "faculty": 1 }
+          ]
+        }
+      }
+    },
+
+    "retrieve_lecturer_5": {
+      "_api": "GET /api/lecturers/7/",
+      "_auth": "authenticated user",
+      "_response_example": {
+        "id": 7,
+        "username": "lecturer5",
+        "email": "lecturer5@ou.edu.vn",
+        "full_name": "Võ Văn Tuấn",
+        "first_name": "Võ Văn",
+        "last_name": "Tuấn",
+        "phone_number": "0902000005",
+        "avatar": null,
+        "dob": "1982-04-18",
+        "faculty": { "id": 2, "name": "Kinh tế - Quản trị kinh doanh" },
+        "lecturer_profile": {
+          "academic_degree": "Tiến sĩ",
+          "position": "Trưởng bộ môn",
+          "specializations": [
+            { "id": 4, "name": "Marketing", "faculty": 2 }
+          ]
+        }
+      }
+    }
+  },
+
+  "topics": {
+    "_comment": "=== API TOPICS (Đề tài giảng viên) ===",
+
+    "lecturer_create_topic": {
+      "_api": "POST /api/users/topics/",
+      "_auth": "lecturer (giảng viên)",
+      "_note": "GV tạo đề tài cho mình. Trường lecturer tự gán từ user đang đăng nhập. DetailSerializer bao gồm technology, difficulty_level.",
+      "_body_example": {
+        "title": "Xây dựng hệ thống quản lý khóa luận tốt nghiệp",
+        "description": "Xây dựng một hệ thống web giúp quản lý toàn bộ quy trình đăng ký và thực hiện khóa luận tốt nghiệp cho sinh viên.",
+        "technology": "Django, React, PostgreSQL",
+        "difficulty_level": "medium"
+      }
+    },
+
+    "lecturer_create_topic_2": {
+      "_api": "POST /api/users/topics/",
+      "_body_example": {
+        "title": "Ứng dụng AI trong nhận diện khuôn mặt",
+        "description": "Nghiên cứu và phát triển ứng dụng nhận diện khuôn mặt sử dụng deep learning.",
+        "technology": "Python, TensorFlow, OpenCV",
+        "difficulty_level": "hard"
+      }
+    },
+
+    "lecturer_create_topic_3": {
+      "_api": "POST /api/users/topics/",
+      "_body_example": {
+        "title": "Hệ thống quản lý học tập thông minh",
+        "description": "Phát triển LMS tích hợp AI đề xuất lộ trình học tập cá nhân hóa cho sinh viên.",
+        "technology": "Django, React, PostgreSQL, Scikit-learn",
+        "difficulty_level": "medium"
+      }
+    },
+
+    "lecturer_create_topic_4": {
+      "_api": "POST /api/users/topics/",
+      "_body_example": {
+        "title": "App quản lý chi tiêu cá nhân",
+        "description": "Phát triển ứng dụng mobile quản lý chi tiêu cá nhân trên nền tảng Flutter.",
+        "technology": "Flutter, Dart, Firebase, SQLite",
+        "difficulty_level": "easy"
+      }
+    },
+
+    "lecturer_create_topic_5": {
+      "_api": "POST /api/users/topics/",
+      "_body_example": {
+        "title": "Phân tích hành vi khách hàng trong thương mại điện tử",
+        "description": "Sử dụng dữ liệu lớn để phân tích và dự đoán hành vi mua sắm của khách hàng trực tuyến.",
+        "technology": "Python, Tableau, BigQuery, Power BI",
+        "difficulty_level": "medium"
+      }
+    },
+
+    "lecturer_list_own_topics": {
+      "_api": "GET /api/users/topics/",
+      "_auth": "lecturer (giảng viên)",
+      "_note": "GV xem danh sách đề tài của mình.",
+      "_response_example": [
+        {
+          "id": 1,
+          "lecturer": 1,
+          "title": "Xây dựng hệ thống quản lý khóa luận tốt nghiệp",
+          "description": "Xây dựng một hệ thống web giúp quản lý toàn bộ quy trình đăng ký..."
+        },
+        {
+          "id": 2,
+          "lecturer": 1,
+          "title": "Ứng dụng AI trong nhận diện khuôn mặt",
+          "description": "Nghiên cứu và phát triển ứng dụng nhận diện khuôn mặt..."
+        }
+      ],
+      "_note": "ListOfTopicsSerializer chỉ trả về id, title, description. Dùng GET {id}/ (DetailSerializer) để lấy thêm technology, difficulty_level."
+    },
+
+    "lecturer_delete_topic": {
+      "_api": "DELETE /api/users/topics/1/",
+      "_auth": "lecturer (chủ đề tài)",
+      "_note": "GV xóa đề tài của mình."
+    },
+
+    "view_lecturer_topics": {
+      "_api": "GET /api/lecturers/3/topics/",
+      "_auth": "authenticated user",
+      "_note": "Xem danh sách đề tài của một giảng viên (chỉ các đề tài is_available=true).",
+      "_response_example": [
+        {
+          "id": 1,
+          "title": "Xây dựng hệ thống quản lý khóa luận tốt nghiệp",
+          "description": "Xây dựng một hệ thống web giúp quản lý toàn bộ quy trình đăng ký..."
+        },
+        {
+          "id": 3,
+          "title": "Phát triển API Gateway cho hệ thống vi dịch vụ",
+          "description": "Xây dựng API Gateway để quản lý và định tuyến các micro-service..."
+        }
+      ]
+    },
+
+    "view_lecturer2_topics": {
+      "_api": "GET /api/lecturers/4/topics/",
+      "_auth": "authenticated user",
+      "_note": "Danh sách đề tài của giảng viên Nguyễn Hoàng Long (lecturer2).",
+      "_response_example": [
+        {
+          "id": 4,
+          "title": "Nhận diện khuôn mặt sử dụng deep learning",
+          "description": "Xây dựng ứng dụng nhận diện khuôn mặt bằng các mô hình deep learning..."
+        },
+        {
+          "id": 5,
+          "title": "Chatbot hỗ trợ tư vấn tuyển sinh",
+          "description": "Phát triển chatbot sử dụng NLP để tư vấn tuyển sinh cho thí sinh."
+        },
+        {
+          "id": 6,
+          "title": "Phân tích cảm xúc trên mạng xã hội",
+          "description": "Sử dụng machine learning để phân tích cảm xúc người dùng..."
+        },
+        {
+          "id": 7,
+          "title": "Hệ thống gợi ý sản phẩm thương mại điện tử",
+          "description": "Xây dựng hệ thống gợi ý sản phẩm sử dụng collaborative filtering..."
+        }
+      ]
+    },
+
+    "view_lecturer3_topics": {
+      "_api": "GET /api/lecturers/5/topics/",
+      "_auth": "authenticated user",
+      "_response_example": [
+        {
+          "id": 8,
+          "title": "Website thương mại điện tử Spring Boot",
+          "description": "Xây dựng website thương mại điện tử sử dụng Spring Boot và React."
+        },
+        {
+          "id": 9,
+          "title": "App quản lý chi tiêu cá nhân",
+          "description": "Phát triển ứng dụng mobile quản lý chi tiêu cá nhân trên Flutter."
+        },
+        {
+          "id": 10,
+          "title": "Hệ thống đặt lịch khám bệnh trực tuyến",
+          "description": "Xây dựng hệ thống đặt lịch khám bệnh từ xa cho các phòng khám đa khoa."
+        }
+      ]
+    },
+
+    "view_lecturer4_topics": {
+      "_api": "GET /api/lecturers/6/topics/",
+      "_auth": "authenticated user",
+      "_response_example": [
+        {
+          "id": 11,
+          "title": "Phát hiện xâm nhập mạng sử dụng học sâu",
+          "description": "Xây dựng hệ thống phát hiện xâm nhập mạng dựa trên các mô hình deep learning."
+        },
+        {
+          "id": 12,
+          "title": "Hệ thống quản lý học tập thông minh",
+          "description": "Phát triển LMS tích hợp AI đề xuất lộ trình học tập cá nhân hóa."
+        },
+        {
+          "id": 13,
+          "title": "Ứng dụng IoT giám sát chất lượng không khí",
+          "description": "Xây dựng hệ thống IoT thu thập và giám sát chất lượng không khí."
+        }
+      ]
+    },
+
+    "view_lecturer5_topics": {
+      "_api": "GET /api/lecturers/7/topics/",
+      "_auth": "authenticated user",
+      "_response_example": [
+        {
+          "id": 14,
+          "title": "Phân tích hành vi khách hàng trong thương mại điện tử",
+          "description": "Sử dụng dữ liệu lớn để phân tích và dự đoán hành vi mua sắm."
+        },
+        {
+          "id": 15,
+          "title": "Chiến lược marketing số cho doanh nghiệp nhỏ",
+          "description": "Nghiên cứu và đề xuất chiến lược marketing số tối ưu cho doanh nghiệp vừa và nhỏ."
+        }
+      ]
+    },
+
+    "view_topic_detail": {
+      "_api": "GET /api/lecturers/3/topics/1/",
+      "_auth": "authenticated user",
+      "_note": "Xem chi tiết một đề tài của giảng viên (dùng ListOfTopicsDetailSerializer, có thêm technology, difficulty_level).",
+      "_response_example": {
+        "id": 1,
+        "title": "Xây dựng hệ thống quản lý khóa luận tốt nghiệp",
+        "description": "Xây dựng một hệ thống web giúp quản lý toàn bộ quy trình đăng ký và thực hiện khóa luận tốt nghiệp cho sinh viên.",
+        "technology": "Django, React, PostgreSQL",
+        "difficulty_level": "medium"
+      }
+    },
+
+    "view_topic_detail_2": {
+      "_api": "GET /api/lecturers/4/topics/4/",
+      "_auth": "authenticated user",
+      "_note": "Chi tiết đề tài Nhận diện khuôn mặt của lecturer2.",
+      "_response_example": {
+        "id": 4,
+        "title": "Nhận diện khuôn mặt sử dụng deep learning",
+        "description": "Xây dựng ứng dụng nhận diện khuôn mặt bằng các mô hình deep learning tiên tiến.",
+        "technology": "Python, TensorFlow, OpenCV",
+        "difficulty_level": "hard"
+      }
+    },
+
+    "view_topic_detail_3": {
+      "_api": "GET /api/lecturers/5/topics/9/",
+      "_auth": "authenticated user",
+      "_note": "Chi tiết đề tài App quản lý chi tiêu (mức dễ).",
+      "_response_example": {
+        "id": 9,
+        "title": "App quản lý chi tiêu cá nhân",
+        "description": "Phát triển ứng dụng mobile quản lý chi tiêu cá nhân trên nền tảng Flutter.",
+        "technology": "Flutter, Dart, Firebase, SQLite",
+        "difficulty_level": "easy"
+      }
+    }
+  },
+
+  "registrations": {
+    "_comment": "=== API PROJECT REGISTRATION (Đăng ký đề tài) ===",
+
+    "statuses": {
+      "_note": "Các trạng thái của phiếu đăng ký",
+      "pending":          "pending           - Chờ duyệt",
+      "waiting_lecturer": "waiting_lecturer  - Chờ phân giảng viên hướng dẫn",
+      "assigned_lecturer":"assigned_lecturer - Đã phân giảng viên hướng dẫn",
+      "approved":         "approved          - Đã duyệt",
+      "rejected":         "rejected          - Bị từ chối"
+    },
+
+    "quy_trinh": {
+      "_note": "Luồng xử lý phiếu đăng ký",
+      "step_1": "SV tạo phiếu -> status = pending, lecturer = null",
+      "step_2": "Staff phân GVHD -> PATCH /api/registrations/{id}/add_lecturer/ -> status = assigned_lecturer",
+      "step_3": "GVHD duyệt -> PATCH /api/registrations/{id}/approve/ -> status = approved",
+      "step_4": "GVHD từ chối -> PATCH /api/registrations/{id}/reject/ -> status = rejected, lecturer = null"
+    },
+
+    "create_registration": {
+      "_api": "POST /api/registrations/",
+      "_auth": "student (sinh viên)",
+      "_note": "SV tạo phiếu đăng ký. Nếu isThesis=true và có nguyện vọng chọn GV, gửi kèm lecturer (user_id). Lecturer phải cùng khoa với SV.",
+      "_body_example_with_lecturer": {
+        "project_title": "Xây dựng hệ thống quản lý khóa luận tốt nghiệp",
+        "project_description": "Em muốn thực hiện đề tài này...",
+        "isThesis": true,
+        "lecturer": 3
+      },
+      "_body_example_without_lecturer": {
+        "project_title": "Xây dựng hệ thống quản lý khóa luận tốt nghiệp",
+        "project_description": "Em muốn thực hiện đề tài này...",
+        "isThesis": true
+      }
+    },
+
+    "create_registration_2": {
+      "_api": "POST /api/registrations/",
+      "_note": "isThesis = false -> không làm KLTN, không cần GVHD",
+      "_body_example": {
+        "project_title": "Ứng dụng Blockchain trong lưu trữ văn bằng",
+        "project_description": "Nghiên cứu ứng dụng công nghệ blockchain để lưu trữ và xác thực văn bằng tốt nghiệp.",
+        "isThesis": false
+      }
+    },
+
+    "list_registrations": {
+      "_api": "GET /api/registrations/",
+      "_auth": "authenticated user",
+      "_note": "Student: chỉ xem phiếu của mình. Lecturer: chỉ xem phiếu mình hướng dẫn. Staff: xem phiếu cùng khoa.",
+      "_response_example_student": [
+        {
+          "id": 1,
+          "student": 2,
+          "lecturer": null,
+          "project_title": "Xây dựng hệ thống quản lý khóa luận tốt nghiệp",
+          "project_description": "Em muốn thực hiện đề tài này...",
+          "status": "pending",
+          "isThesis": true,
+          "created_date": "2026-07-15T10:00:00Z",
+          "updated_date": "2026-07-15T10:00:00Z",
+          "active": true
+        }
+      ],
+      "_response_example_lecturer": [
+        {
+          "id": 1,
+          "student": 2,
+          "lecturer": 3,
+          "project_title": "Xây dựng hệ thống quản lý khóa luận tốt nghiệp",
+          "project_description": "Em muốn thực hiện đề tài này...",
+          "status": "assigned_lecturer",
+          "isThesis": true,
+          "created_date": "2026-07-15T10:00:00Z",
+          "updated_date": "2026-07-15T11:00:00Z",
+          "active": true
+        }
+      ]
+    },
+
+    "retrieve_registration": {
+      "_api": "GET /api/registrations/1/",
+      "_auth": "student (chủ phiếu) | lecturer (GVHD) | staff (cùng khoa)",
+      "_note": "Xem chi tiết đăng ký (dùng DetailSerializer). Faculty lấy từ user.",
+      "_response_example": {
+        "id": 1,
+        "student": 2,
+        "student_info": {
+          "id": 2,
+          "student_id": "31210001",
+          "full_name": "Nguyễn Văn An",
+          "email": "student1@ou.edu.vn",
+          "class_name": "DHCNTT19A",
+          "major": "Kỹ thuật phần mềm",
+          "faculty": "Công nghệ thông tin"
+        },
+        "lecturer": null,
+        "lecturer_info": null,
+        "project_title": "Xây dựng hệ thống quản lý khóa luận tốt nghiệp",
+        "project_description": "Em muốn thực hiện đề tài này...",
+        "status": "pending",
+        "status_display": "Chờ duyệt",
+        "isThesis": true,
+        "created_date": "2026-07-15T10:00:00Z",
+        "updated_date": "2026-07-15T10:00:00Z",
+        "active": true
+      }
+    },
+
+    "add_lecturer": {
+      "_api": "PATCH /api/registrations/1/add_lecturer/",
+      "_auth": "staff (cùng khoa với SV)",
+      "_note": "Staff phân giảng viên hướng dẫn cho phiếu. GV được phân phải cùng khoa với SV. Status tự động thành assigned_lecturer.",
+      "_body_example": {
+        "lecturer_id": 3
+      },
+      "_response_example": {
+        "id": 1,
+        "student": 2,
+        "student_info": { "...": "..." },
+        "lecturer": 3,
+        "lecturer_info": {
+          "id": 3,
+          "full_name": "Trần Thị Bình",
+          "email": "lecturer1@ou.edu.vn",
+          "academic_degree": "Tiến sĩ",
+          "specializations": ["Khoa học máy tính"]
+        },
+        "status": "assigned_lecturer",
+        "status_display": "Đã phân giảng viên hướng dẫn",
+        "isThesis": true,
+        "created_date": "2026-07-15T10:00:00Z",
+        "updated_date": "2026-07-15T11:00:00Z",
+        "active": true
+      }
+    },
+
+    "approve_registration": {
+      "_api": "PATCH /api/registrations/1/approve/",
+      "_auth": "giảng viên hướng dẫn (GV đã được phân qua add_lecturer)",
+      "_note": "GVHD duyệt phiếu. Chỉ GV đã được phân công mới có quyền duyệt.",
+      "_response_example": {
+        "id": 1,
+        "student": 2,
+        "student_info": { "...": "..." },
+        "lecturer": 3,
+        "lecturer_info": {
+          "id": 3,
+          "full_name": "Trần Thị Bình",
+          "email": "lecturer1@ou.edu.vn",
+          "academic_degree": "Tiến sĩ",
+          "specializations": ["Khoa học máy tính"]
+        },
+        "status": "approved",
+        "status_display": "Đã duyệt",
+        "isThesis": true,
+        "created_date": "2026-07-15T10:00:00Z",
+        "updated_date": "2026-07-15T12:00:00Z",
+        "active": true
+      }
+    },
+
+    "reject_registration": {
+      "_api": "PATCH /api/registrations/1/reject/",
+      "_auth": "giảng viên hướng dẫn (GV đã được phân qua add_lecturer)",
+      "_note": "GVHD từ chối phiếu. lecturer tự động set về null.",
+      "_response_example": {
+        "id": 1,
+        "student": 2,
+        "student_info": { "...": "..." },
+        "lecturer": null,
+        "lecturer_info": null,
+        "status": "rejected",
+        "status_display": "Bị từ chối",
+        "isThesis": true,
+        "created_date": "2026-07-15T10:00:00Z",
+        "updated_date": "2026-07-15T12:00:00Z",
+        "active": true
+      }
+    }
+  },
+
+  "_test_flow": {
+    "_comment": "=== LUỒNG TEST ĐỀ XUẤT ===",
+
+    "section_1_student": {
+      "step_1_auth":         "Lấy token student1, POST /o/token/",
+      "step_2_create":       "POST /api/registrations/ (isThesis = true)",
+      "step_3_create_2":     "POST /api/registrations/ (isThesis = false)",
+      "step_4_list":         "GET /api/registrations/ (chỉ thấy phiếu của mình)",
+      "step_5_detail":       "GET /api/registrations/1/"
+    },
+
+    "section_2_staff": {
+      "step_6_auth":         "Lấy token staff1, POST /o/token/",
+      "step_7_list":         "GET /api/registrations/ (chỉ thấy phiếu cùng khoa)",
+      "step_8_add_lecturer": "PATCH /api/registrations/1/add_lecturer/ {\"lecturer_id\": 3}"
+    },
+
+    "section_3_lecturer": {
+      "step_9_auth_lecturer":          "Lấy token lecturer1, POST /o/token/",
+      "step_10_list_registrations":    "GET /api/registrations/ (chỉ thấy phiếu mình hướng dẫn)",
+      "step_11_approve":               "PATCH /api/registrations/1/approve/",
+      "step_12_create_topic":          "POST /api/users/topics/ (body có technology + difficulty_level)",
+      "step_13_list_own_topics":       "GET /api/users/topics/",
+      "step_14_list_lecturers":        "GET /api/lecturers/ (5 lecturers)",
+      "step_15_lecturer_detail":       "GET /api/lecturers/3/",
+      "step_16_view_lecturer_topics":  "GET /api/lecturers/3/topics/",
+      "step_17_view_topic_detail":     "GET /api/lecturers/3/topics/1/ (có technology, difficulty_level)",
+      "step_18_delete_topic":          "DELETE /api/users/topics/1/"
+    },
+
+    "section_4_other_lecturers": {
+      "_comment": "=== XEM THÔNG TIN CÁC GIẢNG VIÊN KHÁC ===",
+      "step_19_lecturer2_detail":     "GET /api/lecturers/4/ (Nguyễn Hoàng Long - AI)",
+      "step_20_lecturer3_detail":     "GET /api/lecturers/5/ (Lê Minh Quân - Spring Boot)",
+      "step_21_lecturer4_detail":     "GET /api/lecturers/6/ (Hoàng Thị Lan - PGS)",
+      "step_22_lecturer5_detail":     "GET /api/lecturers/7/ (Võ Văn Tuấn - Khoa Kinh tế)",
+      "step_23_lecturer2_topics":     "GET /api/lecturers/4/topics/ (4 topics)",
+      "step_24_lecturer3_topics":     "GET /api/lecturers/5/topics/ (3 topics)",
+      "step_25_lecturer4_topics":     "GET /api/lecturers/6/topics/ (3 topics)",
+      "step_26_lecturer5_topics":     "GET /api/lecturers/7/topics/ (2 topics)",
+      "step_27_topic_detail_easy":    "GET /api/lecturers/5/topics/9/ (difficulty_level = easy)",
+      "step_28_topic_detail_hard":    "GET /api/lecturers/4/topics/4/ (difficulty_level = hard)",
+      "step_29_filter_lecturers_faculty": "GET /api/lecturers/?faculty=2 (chỉ GV khoa Kinh tế)",
+      "step_30_topic_desc_search":    "GET /api/lecturers/?search=blockchain (lọc theo từ khoá)"
+    },
+
+    "section_5_reject": {
+      "step_19_staff_add_lecturer_again": "PATCH /api/registrations/2/add_lecturer/ {\"lecturer_id\": 3}",
+      "step_20_lecturer_reject":          "PATCH /api/registrations/2/reject/ (lecturer tự động về null)"
+    }
+  }
+}

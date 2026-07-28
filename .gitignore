@@ -1,0 +1,60 @@
+# =========================
+# ReactJS / Node.js
+# =========================
+
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+
+# React environment variables
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+
+# =========================
+# Django / Python
+# =========================
+
+# Virtual environment
+backend/venv/
+backend/.venv/
+backend/env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Django
+backend/db.sqlite3
+backend/media/
+backend/staticfiles/
+
+# Environment variables
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+
+# =========================
+# IDE
+# =========================
+
+.vscode/
+.idea/
+
+
+# =========================
+# Operating System
+# =========================
+
+.DS_Store
+Thumbs.db
+
+
+# =========================
+# Logs
+# =========================
+
+*.log

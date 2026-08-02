@@ -3,6 +3,7 @@ from theses.models import (
     User, Faculty, Major, Specialization,
     StudentProfile, LecturerProfile, StaffProfile,
 )
+from theses.validators import validate_range
 
 
 class FacultySerializer(serializers.ModelSerializer):
@@ -32,6 +33,12 @@ class StudentProfileSerializer(serializers.ModelSerializer):
             'student_id', 'class_name', 'training_type', 'program_type',
             'academic_year', 'gpa', 'conduct_score', 'major',
         ]
+
+    def validate_gpa(self, value):
+        return validate_range(value, 'GPA', min_value=0, max_value=4)
+
+    def validate_conduct_score(self, value):
+        return validate_range(value, 'Điểm hạnh kiểm', min_value=0, max_value=100)
 
 
 class LecturerProfileSerializer(serializers.ModelSerializer):

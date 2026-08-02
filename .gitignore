@@ -2,14 +2,14 @@
 # ReactJS / Node.js
 # =========================
 
-fontend/node_modules/
-fontend/dist/
-fontend/build/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
 
 # React environment variables
-fontend/.env
-fontend/.env.*
-!fontend/.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
 
 
 # =========================
@@ -66,12 +66,7 @@ __pycache__/
 
 # C extensions
 *.so
-<<<<<<< HEAD
-myapp-490307-7f8c5fec59d0.json
-=======
-Backend/myproject/serviceAccountKey.json
-Backend/myproject/myapp-490307-7f8c5fec59d0.json
->>>>>>> 6a97c2ab3aa46475216b679b9f79150b445a6074
+
 # Distribution / packaging
 .Python
 build/

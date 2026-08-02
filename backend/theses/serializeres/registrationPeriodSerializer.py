@@ -54,6 +54,27 @@ class RegistrationPeriodSerializer(serializers.ModelSerializer):
             attrs.get('report_submission_start'),
             'Thời gian kết thúc đăng ký', 'thời gian bắt đầu nộp báo cáo',
         )
+
+        status = attrs.get('status')
+        if status in RegistrationPeriod.OPEN_STATUSES:
+            faculty = attrs.get('faculty')
+            if not faculty:
+                request = self.context.get('request')
+                if request and request.user.is_authenticated:
+                    faculty = request.user.faculty
+            if faculty:
+                conflicting = RegistrationPeriod.objects.filter(
+                    active=True,
+                    faculty=faculty,
+                    status__in=RegistrationPeriod.OPEN_STATUSES,
+                )
+                if self.instance:
+                    conflicting = conflicting.exclude(pk=self.instance.pk)
+                if conflicting.exists():
+                    raise serializers.ValidationError(
+                        f'Khoa "{faculty.name}" đã có đợt đang mở, không thể tạo thêm.'
+                    )
+
         return attrs
 
     def create(self, validated_data):

@@ -10,13 +10,18 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
     lecturer_name = serializers.SerializerMethodField(read_only=True)
     lecturer_assignments = serializers.SerializerMethodField(read_only=True)
 
+    advisor1 = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    advisor2 = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    note1 = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
+    note2 = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
+
     class Meta:
         model = ProjectRegistration
         fields = [
             'id', 'student', 'avatar', 'student_id', 'student_name',
             'lecturer_name', 'lecturer_assignments',
-            'project_title', 'project_description', 'status',
-            'created_date', 'updated_date', 'active',
+            'project_title', 'project_description', 'is_Thesis', 'status',
+            'advisor1', 'advisor2', 'note1', 'note2',
         ]
         read_only_fields = ['id', 'student', 'created_date', 'updated_date', 'active']
         extra_kwargs = {
@@ -66,17 +71,45 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
     def validate_project_description(self, value):
         return validate_non_blank(value, 'Project description')
 
+    def validate_advisor1(self, value):
+        if value is None:
+            return value
+        if not User.objects.filter(pk=value, role=User.Role.LECTURER).exists():
+            raise serializers.ValidationError('Giảng viên không tồn tại.')
+        return value
+
+    def validate_advisor2(self, value):
+        if value is None:
+            return value
+        if not User.objects.filter(pk=value, role=User.Role.LECTURER).exists():
+            raise serializers.ValidationError('Giảng viên không tồn tại.')
+        return value
+
     def validate(self, attrs):
         request = self.context.get('request')
         if not request:
             return attrs
 
         if request.method == 'POST' and request.user.role == User.Role.STUDENT:
-            if hasattr(request.user, 'project_registration'):
-                raise serializers.ValidationError(
-                    'Bạn đã có một phiếu đăng ký, không thể tạo thêm.'
-                )
+            period = self.context.get('registration_period')
+            if period:
+                duplicate = ProjectRegistration.objects.filter(
+                    student=request.user,
+                    registration_period=period,
+                    active=True,
+                ).exists()
+                if duplicate:
+                    raise serializers.ValidationError(
+                        'Bạn đã đăng ký trong đợt này rồi, không thể tạo thêm.'
+                    )
             attrs.pop('status', None)
+
+            a1 = attrs.get('advisor1')
+            a2 = attrs.get('advisor2')
+            if a1 is not None and a2 is not None and a1 == a2:
+                raise serializers.ValidationError('Giảng viên nguyện vọng 1 và 2 không được trùng nhau.')
+            if a2 is not None and a1 is None:
+                raise serializers.ValidationError('Vui lòng chọn nguyện vọng 1 trước khi chọn nguyện vọng 2.')
 
         if request.method in ('PUT', 'PATCH') and request.user.role in (
             User.Role.LECTURER, User.Role.STUDENT
@@ -89,7 +122,36 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             validated_data['student'] = request.user
-        return super().create(validated_data)
+
+        advisor1 = validated_data.pop('advisor1', None)
+        advisor2 = validated_data.pop('advisor2', None)
+        note1 = validated_data.pop('note1', '')
+        note2 = validated_data.pop('note2', '')
+
+        registration = super().create(validated_data)
+
+        if advisor1:
+            RegistrationLecturer.objects.create(
+                registration=registration,
+                lecturer_id=advisor1,
+                role=RegistrationLecturer.Role.MAIN,
+                approval_status=RegistrationLecturer.ApprovalStatus.PENDING,
+                note=note1,
+            )
+        if advisor2:
+            RegistrationLecturer.objects.create(
+                registration=registration,
+                lecturer_id=advisor2,
+                role=RegistrationLecturer.Role.BACKUP,
+                approval_status=RegistrationLecturer.ApprovalStatus.PENDING_TRANSFER,
+                note=note2,
+            )
+
+        if advisor1:
+            registration.status = ProjectRegistration.STATUS.ASSIGNED_LECTURER_AND_PENDING
+            registration.save(update_fields=['status'])
+
+        return registration
 
 
 class ProjectRegistrationDetailSerializer(ProjectRegistrationSerializer):
@@ -144,3 +206,41 @@ class ProjectRegistrationDetailSerializer(ProjectRegistrationSerializer):
                 'specializations': [s.name for s in profile.specializations.all()] if profile else [],
             })
         return result
+
+
+class BaseRegistrationApprovalSerializer(serializers.Serializer):
+    note = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate(self, attrs):
+        registration = self.context.get('registration')
+        assignment = registration.lecturer_assignments.filter(
+            role=RegistrationLecturer.Role.MAIN,
+        ).first()
+        if not assignment:
+            raise serializers.ValidationError('Đăng ký này chưa có giảng viên hướng dẫn.')
+        if assignment.approval_status != RegistrationLecturer.ApprovalStatus.PENDING:
+            raise serializers.ValidationError(self.error_msg)
+        attrs['assignment'] = assignment
+        return attrs
+
+
+class ApproveRegistrationSerializer(BaseRegistrationApprovalSerializer):
+    error_msg = 'Chỉ duyệt được đăng ký ở trạng thái chờ duyệt.'
+
+
+class RejectRegistrationSerializer(BaseRegistrationApprovalSerializer):
+    error_msg = 'Chỉ từ chối được đăng ký ở trạng thái chờ duyệt.'
+
+
+class AddLecturerSerializer(serializers.Serializer):
+    lecturer_id = serializers.IntegerField()
+
+    def validate_lecturer_id(self, value):
+        registration = self.context.get('registration')
+        try:
+            lecturer = User.objects.get(pk=value, role=User.Role.LECTURER)
+        except User.DoesNotExist:
+            raise serializers.ValidationError('Giảng viên không tồn tại.')
+        if lecturer.faculty != registration.student.faculty:
+            raise serializers.ValidationError('Giảng viên phải cùng khoa với sinh viên.')
+        return lecturer

@@ -10,7 +10,7 @@ from theses.validators import (
 class ListOfTopicsSerializer(serializers.ModelSerializer):
     class Meta:
         model = ListOfTopics
-        fields = ['id', 'title', 'description']
+        fields = ['id', 'title', 'description','difficulty_level']
         read_only_fields = ['id']
 
     def validate_title(self, value):
@@ -18,6 +18,21 @@ class ListOfTopicsSerializer(serializers.ModelSerializer):
         value = validate_length(value, 'Title', max_length=255)
         value = validate_no_dangerous_chars(value, 'Title')
         return value
+
+    def validate(self, attrs):
+        lecturer = self.context['request'].user
+        title = attrs.get('title')
+        if title:
+            qs = ListOfTopics.objects.filter(
+                lecturer=lecturer, title=title, active=True,
+            )
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    {'title': 'Bạn đã có đề tài với tiêu đề này rồi.'}
+                )
+        return attrs
 
     def validate_description(self, value):
         value = validate_non_blank(value, 'Description')
@@ -28,7 +43,7 @@ class ListOfTopicsSerializer(serializers.ModelSerializer):
 class ListOfTopicsDetailSerializer(ListOfTopicsSerializer):
     class Meta:
         model = ListOfTopicsSerializer.Meta.model
-        fields = ListOfTopicsSerializer.Meta.fields + ['difficulty_level', 'technology']
+        fields = ListOfTopicsSerializer.Meta.fields + ['technology']
 
     def validate_technology(self, value):
         if not value or not value.strip():

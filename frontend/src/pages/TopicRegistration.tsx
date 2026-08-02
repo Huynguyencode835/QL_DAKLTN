@@ -4,15 +4,14 @@ import { useModal } from '../hooks';
 import { fetchWithAuth, createWithAuth } from '../utils/ApiHelper';
 import { endpoints } from '../config/Apis';
 import { SectionCard } from '../components/Ui/Card';
+import Card from '../components/Ui/Card';
 import Input from '../components/Ui/Input';
 import Dropdown from '../components/Ui/Dropdown';
-import Select from '../components/Ui/Select';
 import Textarea from '../components/Ui/Textarea';
 import Button from '../components/Ui/Button';
 import ChoiceCard from '../components/Ui/Choicecard';
 import Badge from '../components/Ui/Badge';
 import { DIFFICULTY_CONFIG } from '../types';
-import type { RegistrationPeriod } from '../types';
 
 export default function TopicRegistration() {
   const { user } = useUser();
@@ -32,13 +31,13 @@ export default function TopicRegistration() {
     project_title: '',
   });
 
-  const [registrationPeriods, setRegistrationPeriods] = useState<RegistrationPeriod[]>([]);
-  const [selectedPeriodId, setSelectedPeriodId] = useState('');
   const [lecturers, setLecturers] = useState<any[]>([]);
   const [topics1, setTopics1] = useState<any[]>([]);
   const [topics2, setTopics2] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<{ type: string; message: string } | null>(null);
+  const [existingRegistration, setExistingRegistration] = useState<any | null>(null);
+  const [loadingReg, setLoadingReg] = useState(true);
 
   const update = (field: string) => (e: any) => setForm(prev => ({ ...prev, [field]: e.target?.value ?? e }));
 
@@ -52,21 +51,21 @@ export default function TopicRegistration() {
       email: user.email || '',
       major: p.major?.major_name || '',
     }));
-    loadPeriods();
     loadLecturers();
+    fetchWithAuth(
+      endpoints.registrations("current"),
+      (data: any[]) => {
+        if (data && data.length > 0) {
+          setExistingRegistration(data[0]);
+        }
+        setLoadingReg(false);
+      },
+      () => setLoadingReg(false),
+    );
   }, [user]);
 
   const loadLecturers = async () => {
     await fetchWithAuth(endpoints.lecturers, setLecturers, () => { });
-  };
-
-  const loadPeriods = async () => {
-    await fetchWithAuth(endpoints.registrationPeriods, (data: RegistrationPeriod[]) => {
-      setRegistrationPeriods(data);
-      if (data.length > 0 && !selectedPeriodId) {
-        setSelectedPeriodId(String(data[0].id));
-      }
-    }, () => { });
   };
 
   const loadLecturerTopics = async (id: string, onSuccess: any) => {
@@ -162,15 +161,15 @@ export default function TopicRegistration() {
     const body: any = {
       project_title: form.project_title || form.project_description,
       project_description: form.project_description,
-      isThesis: form.isThesis === 'true',
+      is_Thesis: form.isThesis === 'true',
+      advisor1: form.advisor1 ? parseInt(form.advisor1) : null,
+      advisor2: form.advisor2 ? parseInt(form.advisor2) : null,
+      note1: form.note1 || '',
+      note2: form.note2 || '',
     };
 
-    if (form.isThesis === 'true' && form.advisor1) {
-      body.lecturer = parseInt(form.advisor1);
-    }
-
     await createWithAuth(
-      endpoints.registrations(selectedPeriodId),
+      endpoints.registrations("current"),
       body,
       () => setSubmitResult({ type: 'success', message: 'Đăng ký thành công!' }),
       (type: string, msg: string) => setSubmitResult({ type: 'error', message: msg }),
@@ -178,9 +177,108 @@ export default function TopicRegistration() {
     );
   };
 
+  const STATUS_CONFIG: Record<string, { label: string; variant: string }> = {
+    waiting_lecturer: { label: 'Chờ phân giảng viên', variant: 'warning' },
+    assigned_lecturer: { label: 'Đã phân giảng viên', variant: 'info' },
+  };
+  const APPROVAL_CONFIG: Record<string, { label: string; variant: string }> = {
+    pending: { label: 'Chờ duyệt', variant: 'warning' },
+    approved: { label: 'Đã duyệt', variant: 'success' },
+    rejected: { label: 'Từ chối', variant: 'danger' },
+  };
+
   const lecturer1 = lecturers.find(l => l.id == form.advisor1);
   const lecturer2 = lecturers.find(l => l.id == form.advisor2);
   const hasSuggestions = (form.advisor1 && topics1.length > 0) || (form.advisor2 && topics2.length > 0);
+
+  const statusCfg = STATUS_CONFIG[existingRegistration?.status] || {};
+  const thesisLabel = existingRegistration?.is_Thesis ? 'Khóa luận tốt nghiệp' : 'Hình thức khác';
+
+  if (loadingReg) {
+    return (
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-gray-400">
+          <i className="fa-solid fa-spinner fa-spin text-3xl"></i>
+          <p className="text-sm">Đang tải thông tin đăng ký...</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (existingRegistration) {
+    return (
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
+        <div className="space-y-8 max-w-4xl mx-auto w-full">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-800 mb-1">Đăng ký Đồ án tốt nghiệp</h2>
+              <p className="text-sm text-gray-500">Thông tin đăng ký hiện tại của bạn</p>
+            </div>
+            <Badge variant={statusCfg.variant as any}>{statusCfg.label || existingRegistration.status}</Badge>
+          </div>
+
+          <SectionCard title="Thông tin sinh viên" icon="fa-regular fa-user">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Input label="Mã số sinh viên" value={p.student_id || ''} disabled />
+              <Input label="Họ và tên" value={user ? `${user.last_name} ${user.first_name}` : '---'} disabled />
+              <Input label="Email" value={user?.email || ''} disabled />
+              <Input label="Lớp" value={p.class_name || ''} disabled />
+              <Input label="Khoa" value={user?.faculty?.name || ''} disabled />
+              <Input label="Loại đăng ký" value={thesisLabel} disabled />
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Thông tin đề tài" icon="fa-regular fa-file-lines">
+            <Input label="Tên đề tài" value={existingRegistration.project_title || ''} disabled />
+            <Card variant="soft" bodyClassName="!p-0">
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Mô tả</p>
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {existingRegistration.project_description || '—'}
+              </p>
+            </Card>
+          </SectionCard>
+
+          {existingRegistration.lecturer_assignments?.length > 0 && (
+            <SectionCard title="Giảng viên hướng dẫn" icon="fa-solid fa-chalkboard-user">
+              <div className="space-y-4">
+                {existingRegistration.lecturer_assignments.map((a: any) => {
+                  const appCfg = APPROVAL_CONFIG[a.approval_status] || {};
+                  const roleLabel = a.role === 'main' ? 'Chính thức' : a.role === 'backup' ? 'Dự phòng' : a.role;
+                  return (
+                    <Card key={a.id} variant="outline" bodyClassName="!p-0 flex items-start justify-between w-full">
+                      <div>
+                        <p className="font-medium text-gray-800 text-sm">{a.lecturer_name}</p>
+                        <Badge variant={a.role === 'main' ? 'primary' : 'neutral'} className="mt-1">
+                          {roleLabel}
+                        </Badge>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant={appCfg.variant as any}>{appCfg.label}</Badge>
+                        {a.note && <p className="text-xs text-gray-400 mt-1 max-w-[200px] truncate">{a.note}</p>}
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </SectionCard>
+          )}
+
+          <Card variant="soft" icon="fa-solid fa-circle-info" title="Trạng thái đăng ký" className="!p-4 bg-blue-50/60 border-blue-100" bodyClassName="!p-0">
+            <p className="text-xs text-blue-700">
+              {existingRegistration.status === 'waiting_lecturer'
+                ? 'Đơn đăng ký của bạn đang chờ được phân giảng viên hướng dẫn.'
+                : 'Đơn đăng ký của bạn đã được phân giảng viên hướng dẫn và đang chờ duyệt.'}
+            </p>
+          </Card>
+        </div>
+
+        <footer className="mt-8 border-t border-gray-200 pt-4 flex justify-between items-center text-xs text-gray-500 pb-2 px-6">
+          <p>© 2025 Thesis Portal - Hệ thống Quản lý Luận văn Tốt nghiệp</p>
+          <p>Phiên bản 2.1.0 · Hỗ trợ: <a className="text-primary hover:underline" href="mailto:support@thesisportal.edu.vn">support@thesisportal.edu.vn</a></p>
+        </footer>
+      </main>
+    );
+  }
 
   return (
     <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
@@ -200,19 +298,6 @@ export default function TopicRegistration() {
         )}
 
         <form className="space-y-8" onSubmit={handleSubmit}>
-          <SectionCard title="Đợt đăng ký" icon="fa-solid fa-calendar">
-            <Select
-              label="Chọn đợt đăng ký"
-              placeholder="Chọn đợt..."
-              value={selectedPeriodId}
-              onChange={(e: any) => setSelectedPeriodId(e.target.value)}
-              options={registrationPeriods.map((p) => ({
-                value: String(p.id),
-                label: `${p.name} (${p.academic_year})`,
-              }))}
-            />
-          </SectionCard>
-
           <SectionCard title="Thông tin sinh viên" icon="fa-regular fa-user">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Input label="Mã số sinh viên" value={p.student_id || ''} disabled />

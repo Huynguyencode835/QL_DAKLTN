@@ -18,6 +18,22 @@ from theses.models import (
 
 
 # ============================================================
+# ===================  TÀI KHOẢN HERO  ======================
+# staff1 / student1 / lecturer1 là 3 tài khoản trung tâm của
+# toàn bộ seed data — được tạo TRƯỚC TIÊN, có dữ liệu đầy đủ
+# nhất, và dùng để test toàn bộ luồng nghiệp vụ chính:
+#   - staff1: tạo & quản lý các RegistrationPeriod của khoa CNTT
+#   - student1: có 1 đăng ký đồ án hoàn chỉnh, đã được duyệt
+#   - lecturer1: có nhiều đề tài (10) và hướng dẫn nhiều sinh
+#     viên với đủ các trạng thái duyệt (APPROVED/REJECTED/PENDING)
+# ============================================================
+
+HERO_STAFF_USERNAME = 'staff1'
+HERO_STUDENT_USERNAME = 'student1'
+HERO_LECTURER_USERNAME = 'lecturer1'
+
+
+# ============================================================
 # DANH MỤC GỐC: Khoa, Ngành, Chuyên ngành
 # ============================================================
 
@@ -51,8 +67,8 @@ specialization_data = [
 
 # ============================================================
 # SINH VIÊN
-# student1 là tài khoản "hero" — sẽ có đăng ký hoàn chỉnh (APPROVED)
-# với lecturer1 để test đầy đủ luồng chi tiết 1 sinh viên.
+# student1 (index 0) là tài khoản hero — sẽ có đăng ký hoàn
+# chỉnh (APPROVED) với lecturer1 để test đầy đủ luồng chi tiết.
 # ============================================================
 
 students_data = [
@@ -281,8 +297,8 @@ students_data = [
 
 # ============================================================
 # GIẢNG VIÊN
-# lecturer1 là tài khoản "hero" — có nhiều đề tài (10) và
-# hướng dẫn nhiều sinh viên với đủ các trạng thái đăng ký.
+# lecturer1 (index 0) là tài khoản hero — có nhiều đề tài (10)
+# và hướng dẫn nhiều sinh viên với đủ các trạng thái đăng ký.
 # ============================================================
 
 lecturers_data = [
@@ -444,8 +460,8 @@ lecturers_data = [
 
 # ============================================================
 # GIÁO VỤ (STAFF)
-# staff1 là tài khoản "hero" — là người tạo phần lớn các đợt
-# đăng ký của khoa CNTT, phủ đủ mọi trạng thái RegistrationPeriod.
+# staff1 (index 0) là tài khoản hero — là người tạo phần lớn
+# các đợt đăng ký của khoa CNTT, phủ đủ mọi trạng thái.
 # ============================================================
 
 staffs_data = [
@@ -468,6 +484,111 @@ staffs_data = [
         'profile': {'position': 'Chuyên viên đào tạo'},
     },
 ]
+
+
+# ============================================================
+# HÀM TẠO DÙNG CHUNG
+# Tách riêng logic tạo student/lecturer/staff thành hàm để
+# gọi lại cho cả hero (tạo trước, nổi bật) lẫn user còn lại
+# (tạo sau, theo vòng lặp bình thường) mà không lặp code.
+# ============================================================
+
+def create_student(data, faculties, majors):
+    faculty = faculties[data['faculty_idx']]
+    major = majors[data['profile']['major_idx']]
+    user, created = User.objects.get_or_create(
+        username=data['username'],
+        defaults={
+            'email': data['email'],
+            'first_name': data['first_name'],
+            'last_name': data['last_name'],
+            'role': 'student',
+            'phone_number': f"09{str(hash(data['username']) % 100000000).zfill(8)}",
+            'dob': date(2002, 5, 15),
+            'faculty': faculty,
+        },
+    )
+    if created:
+        user.set_password(data['password'])
+        user.save()
+        p = data['profile']
+        StudentProfile.objects.get_or_create(
+            user=user,
+            defaults={
+                'student_id': p['student_id'],
+                'class_name': p['class_name'],
+                'training_type': p['training_type'],
+                'program_type': p['program_type'],
+                'academic_year': p['academic_year'],
+                'gpa': p['gpa'],
+                'conduct_score': p['conduct_score'],
+                'major': major,
+            },
+        )
+    return user, created
+
+
+def create_lecturer(data, faculties, specializations):
+    faculty = faculties[data['faculty_idx']]
+    user, created = User.objects.get_or_create(
+        username=data['username'],
+        defaults={
+            'email': data['email'],
+            'first_name': data['first_name'],
+            'last_name': data['last_name'],
+            'role': 'lecturer',
+            'phone_number': f"09{str(hash(data['username']) % 100000000).zfill(8)}",
+            'dob': date(1985, 8, 20),
+            'faculty': faculty,
+        },
+    )
+    if created:
+        user.set_password(data['password'])
+        user.save()
+        profile, _ = LecturerProfile.objects.get_or_create(
+            user=user,
+            defaults={
+                'academic_degree': data['profile']['academic_degree'],
+                'position': data['profile']['position'],
+            },
+        )
+        for sp_idx in data['specializations']:
+            profile.specializations.add(specializations[sp_idx])
+        for topic_data in data['topics']:
+            ListOfTopics.objects.get_or_create(
+                lecturer=user,
+                title=topic_data['title'],
+                defaults={
+                    'description': topic_data['description'],
+                    'technology': topic_data['technology'],
+                    'difficulty_level': topic_data['difficulty_level'],
+                },
+            )
+    return user, created
+
+
+def create_staff(data, faculties):
+    faculty = faculties[data['faculty_idx']]
+    user, created = User.objects.get_or_create(
+        username=data['username'],
+        defaults={
+            'email': data['email'],
+            'first_name': data['first_name'],
+            'last_name': data['last_name'],
+            'role': 'staff',
+            'phone_number': f"09{str(hash(data['username']) % 100000000).zfill(8)}",
+            'dob': date(1990, 12, 1),
+            'faculty': faculty,
+        },
+    )
+    if created:
+        user.set_password(data['password'])
+        user.save()
+        StaffProfile.objects.get_or_create(
+            user=user,
+            defaults={'position': data['profile']['position']},
+        )
+    return user, created
 
 
 @transaction.atomic
@@ -505,124 +626,85 @@ def run():
         )
         specializations.append(s)
 
+    # ========================================================
+    # ===============  TẠO 3 TÀI KHOẢN HERO  ================
+    # Tạo trước tiên, in log nổi bật riêng để dễ nhận biết khi
+    # chạy script — đây là 3 tài khoản chính dùng để demo/test.
+    # ========================================================
+    print('\n' + '=' * 60)
+    print('  TẠO TÀI KHOẢN HERO (staff1, student1, lecturer1)')
+    print('=' * 60)
+
+    hero_student_data = next(d for d in students_data if d['username'] == HERO_STUDENT_USERNAME)
+    hero_lecturer_data = next(d for d in lecturers_data if d['username'] == HERO_LECTURER_USERNAME)
+    hero_staff_data = next(d for d in staffs_data if d['username'] == HERO_STAFF_USERNAME)
+
+    staff1, staff1_created = create_staff(hero_staff_data, faculties)
+    print(f"  ★ Staff hero:    {staff1.username} "
+          f"({'created' if staff1_created else 'already exists'})")
+
+    student1, student1_created = create_student(hero_student_data, faculties, majors)
+    print(f"  ★ Student hero:  {student1.username} "
+          f"({'created' if student1_created else 'already exists'})")
+
+    lecturer1, lecturer1_created = create_lecturer(hero_lecturer_data, faculties, specializations)
+    print(f"  ★ Lecturer hero: {lecturer1.username} "
+          f"({'created' if lecturer1_created else 'already exists'}, "
+          f"{len(hero_lecturer_data['topics'])} topics)")
+
+    print('=' * 60 + '\n')
+
     # --------------------------------------------------------
-    # Sinh viên
+    # Sinh viên còn lại (bỏ qua student1 đã tạo ở trên)
     # --------------------------------------------------------
+    print('--- Sinh viên còn lại ---')
     for data in students_data:
-        faculty = faculties[data['faculty_idx']]
-        major = majors[data['profile']['major_idx']]
-        user, created = User.objects.get_or_create(
-            username=data['username'],
-            defaults={
-                'email': data['email'],
-                'first_name': data['first_name'],
-                'last_name': data['last_name'],
-                'role': 'student',
-                'phone_number': f"09{str(hash(data['username']) % 100000000).zfill(8)}",
-                'dob': date(2002, 5, 15),
-                'faculty': faculty,
-            },
-        )
-        if created:
-            user.set_password(data['password'])
-            user.save()
-            p = data['profile']
-            StudentProfile.objects.get_or_create(
-                user=user,
-                defaults={
-                    'student_id': p['student_id'],
-                    'class_name': p['class_name'],
-                    'training_type': p['training_type'],
-                    'program_type': p['program_type'],
-                    'academic_year': p['academic_year'],
-                    'gpa': p['gpa'],
-                    'conduct_score': p['conduct_score'],
-                    'major': major,
-                },
-            )
-            print(f"  Created student: {user.username}")
-        else:
-            print(f"  Student exists: {user.username}")
+        if data['username'] == HERO_STUDENT_USERNAME:
+            continue
+        user, created = create_student(data, faculties, majors)
+        print(f"  {'Created' if created else 'Exists '} student: {user.username}")
 
     # --------------------------------------------------------
-    # Giảng viên + Đề tài
+    # Giảng viên còn lại (bỏ qua lecturer1 đã tạo ở trên)
     # --------------------------------------------------------
+    print('--- Giảng viên còn lại ---')
     for data in lecturers_data:
-        faculty = faculties[data['faculty_idx']]
-        user, created = User.objects.get_or_create(
-            username=data['username'],
-            defaults={
-                'email': data['email'],
-                'first_name': data['first_name'],
-                'last_name': data['last_name'],
-                'role': 'lecturer',
-                'phone_number': f"09{str(hash(data['username']) % 100000000).zfill(8)}",
-                'dob': date(1985, 8, 20),
-                'faculty': faculty,
-            },
-        )
-        if created:
-            user.set_password(data['password'])
-            user.save()
-            profile, _ = LecturerProfile.objects.get_or_create(
-                user=user,
-                defaults={
-                    'academic_degree': data['profile']['academic_degree'],
-                    'position': data['profile']['position'],
-                },
-            )
-            for sp_idx in data['specializations']:
-                profile.specializations.add(specializations[sp_idx])
-            for topic_data in data['topics']:
-                ListOfTopics.objects.get_or_create(
-                    lecturer=user,
-                    title=topic_data['title'],
-                    defaults={
-                        'description': topic_data['description'],
-                        'technology': topic_data['technology'],
-                        'difficulty_level': topic_data['difficulty_level'],
-                    },
-                )
-            print(f"  Created lecturer: {user.username} ({len(data['topics'])} topics)")
-        else:
-            print(f"  Lecturer exists: {user.username}")
+        if data['username'] == HERO_LECTURER_USERNAME:
+            continue
+        user, created = create_lecturer(data, faculties, specializations)
+        print(f"  {'Created' if created else 'Exists '} lecturer: {user.username} "
+              f"({len(data['topics'])} topics)")
 
     # --------------------------------------------------------
-    # Giáo vụ (staff) — tạo trước để dùng làm created_by cho các đợt
+    # Giáo vụ còn lại (bỏ qua staff1 đã tạo ở trên)
     # --------------------------------------------------------
+    print('--- Giáo vụ còn lại ---')
     for data in staffs_data:
-        faculty = faculties[data['faculty_idx']]
-        user, created = User.objects.get_or_create(
-            username=data['username'],
-            defaults={
-                'email': data['email'],
-                'first_name': data['first_name'],
-                'last_name': data['last_name'],
-                'role': 'staff',
-                'phone_number': f"09{str(hash(data['username']) % 100000000).zfill(8)}",
-                'dob': date(1990, 12, 1),
-                'faculty': faculty,
-            },
-        )
-        if created:
-            user.set_password(data['password'])
-            user.save()
-            StaffProfile.objects.get_or_create(
-                user=user,
-                defaults={'position': data['profile']['position']},
-            )
-            print(f"  Created staff: {user.username}")
-        else:
-            print(f"  Staff exists: {user.username}")
+        if data['username'] == HERO_STAFF_USERNAME:
+            continue
+        user, created = create_staff(data, faculties)
+        print(f"  {'Created' if created else 'Exists '} staff: {user.username}")
 
     users_by_username = {u.username: u for u in User.objects.all()}
-    staff1 = users_by_username['staff1']
+    staff1 = users_by_username[HERO_STAFF_USERNAME]
     staff3 = users_by_username['staff3']
 
     # --------------------------------------------------------
     # Đợt đăng ký (RegistrationPeriod)
-    # Phủ đủ mọi trạng thái, đa số do staff1 (khoa CNTT) tạo,
-    # thêm 1 đợt riêng của khoa KTQTKD do staff3 tạo.
+    #
+    # LƯU Ý QUAN TRỌNG: theo ràng buộc
+    # `unique_open_registration_period_per_faculty`, mỗi khoa chỉ
+    # được có TỐI ĐA 1 đợt đang ở trạng thái "mở" (nằm trong
+    # RegistrationPeriod.OPEN_STATUSES = DRAFT, STUDENT_REGISTRATION,
+    # IN_PROGRESS, REPORT_SUBMISSION) tại một thời điểm.
+    #
+    # Vì vậy với khoa CNTT (faculty_idx=0), chỉ `open_1` được giữ
+    # trạng thái "mở" (STUDENT_REGISTRATION — đợt đang thực sự diễn
+    # ra tại thời điểm chạy seed). Các đợt còn lại của CNTT đại diện
+    # cho những học kỳ ĐÃ QUA nên được chuyển về CLOSED/ARCHIVED cho
+    # đúng với thực tế (không có 2 đợt cùng "đang mở" một lúc).
+    # Khoa KTQTKD (faculty_idx=1) có `ktqtkd_open` là đợt "mở" duy
+    # nhất của khoa đó — không xung đột vì khác khoa.
     # --------------------------------------------------------
     def dt(weeks_offset):
         return now + timedelta(weeks=weeks_offset)
@@ -653,22 +735,25 @@ def run():
             'execution_duration_weeks': 10,
         },
         {
+            # Đã hoàn tất nộp báo cáo từ lâu -> đóng đợt (không còn "mở")
             'key': 'report_submission_1', 'name': 'Đợt 4 - Học kỳ 2 (2023-2024)',
-            'academic_year': '2023-2024', 'status': RegistrationPeriod.STATUS.REPORT_SUBMISSION,
+            'academic_year': '2023-2024', 'status': RegistrationPeriod.STATUS.CLOSED,
             'faculty_idx': 0, 'created_by': staff1,
             'student_registration_start': dt(-20), 'student_registration_end': dt(-14),
             'report_submission_start': dt(-13), 'report_submission_end': dt(1),
             'execution_duration_weeks': 10,
         },
         {
+            # Đợt trước đã hoàn tất thực hiện đồ án -> đóng đợt (không còn "mở")
             'key': 'in_progress_1', 'name': 'Đợt 5 - Học kỳ 1 (2024-2025)',
-            'academic_year': '2024-2025', 'status': RegistrationPeriod.STATUS.IN_PROGRESS,
+            'academic_year': '2024-2025', 'status': RegistrationPeriod.STATUS.CLOSED,
             'faculty_idx': 0, 'created_by': staff1,
             'student_registration_start': dt(-10), 'student_registration_end': dt(-4),
             'report_submission_start': dt(2), 'report_submission_end': dt(9),
             'execution_duration_weeks': 10,
         },
         {
+            # Đợt duy nhất đang "mở" của khoa CNTT tại thời điểm chạy seed
             'key': 'open_1', 'name': 'Đợt 6 - Học kỳ 2 (2024-2025)',
             'academic_year': '2024-2025', 'status': RegistrationPeriod.STATUS.STUDENT_REGISTRATION,
             'faculty_idx': 0, 'created_by': staff1,
@@ -677,14 +762,18 @@ def run():
             'execution_duration_weeks': 10,
         },
         {
+            # Đợt này được đặt CLOSED (không phải DRAFT) vì unique constraint
+            # chỉ cho phép 1 đợt "mở" (DRAFT/STUDENT_REGISTRATION/IN_PROGRESS/
+            # REPORT_SUBMISSION) mỗi khoa, mà open_1 đã ở STUDENT_REGISTRATION rồi.
             'key': 'draft_1', 'name': 'Đợt 7 - Học kỳ 1 (2025-2026)',
-            'academic_year': '2025-2026', 'status': RegistrationPeriod.STATUS.DRAFT,
+            'academic_year': '2025-2026', 'status': RegistrationPeriod.STATUS.CLOSED,
             'faculty_idx': 0, 'created_by': staff1,
             'student_registration_start': dt(10), 'student_registration_end': dt(14),
             'report_submission_start': dt(24), 'report_submission_end': dt(31),
             'execution_duration_weeks': 10,
         },
         {
+            # Đợt "mở" duy nhất của khoa KTQTKD -> không xung đột vì khác khoa
             'key': 'ktqtkd_open', 'name': 'Đợt KTQTKD - Học kỳ 1 (2024-2025)',
             'academic_year': '2024-2025', 'status': RegistrationPeriod.STATUS.STUDENT_REGISTRATION,
             'faculty_idx': 1, 'created_by': staff3,
@@ -884,8 +973,9 @@ def run():
         )
 
         if created:
+            marker = ' ★' if student.username == HERO_STUDENT_USERNAME else ''
             print(
-                f"  Created registration: {student.username} "
+                f"  Created registration{marker}: {student.username} "
                 f"-> {lecturer.username if lecturer else 'TBD'} [{reg_status}]"
             )
 
@@ -911,7 +1001,8 @@ def run():
                     },
                 )
 
-    print("=== Seed completed ===")
+    print("\n=== Seed completed ===")
+    print(f"    Hero accounts: {HERO_STAFF_USERNAME}, {HERO_STUDENT_USERNAME}, {HERO_LECTURER_USERNAME}")
 
 
 if __name__ == '__main__':

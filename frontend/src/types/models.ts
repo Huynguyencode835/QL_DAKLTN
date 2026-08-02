@@ -64,7 +64,7 @@ export interface Registration {
   id: number;
   project_title?: string;
   project_description?: string;
-  isThesis?: boolean;
+  is_Thesis?: boolean;
   status: RegistrationStatus;
   student_name?: string;
   student_id?: string;
@@ -85,6 +85,18 @@ export interface Registration {
     major?: string;
     avatar?: string;
   };
+  lecturer_info?: {
+    id: number;
+    lecturer_id: number;
+    full_name: string;
+    email?: string;
+    role: 'main' | 'backup' | 'reviewer';
+    approval_status: 'pending' | 'approved' | 'rejected' | 'skipped';
+    note?: string;
+    academic_degree?: string;
+    specializations?: string[];
+  }[];
+  status_display?: string;
 }
 
 export interface RegistrationPeriod {

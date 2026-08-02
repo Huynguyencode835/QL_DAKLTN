@@ -27,7 +27,6 @@ export default function TopicManagement() {
   const { openModal, closeModal } = useModal();
   const [topics, setTopics] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  // const [search, setSearch] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState('');
   const [form, setForm] = useState({ ...emptyForm });
   const [submitting, setSubmitting] = useState(false);
@@ -82,11 +81,15 @@ export default function TopicManagement() {
   const openFormModal = (topic: any = null) => {
     if (topic) {
       setEditingId(topic.id);
-      setForm({
-        title: topic.title || '',
-        description: topic.description || '',
-        technology: topic.technology || '',
-        difficulty_level: topic.difficulty_level || 'medium',
+      console.log(typeof topic.id);
+      loadTopicDetail(topic.id, (data: any) => {
+        console.log('Loaded topic detail:', data);
+        setForm({
+          title: data.title || '',
+          description: data.description || '',
+          technology: data.technology || '',
+          difficulty_level: data.difficulty_level || 'medium',
+        });
       });
     } else {
       resetForm();
@@ -155,17 +158,6 @@ export default function TopicManagement() {
     });
   };
 
-  // const filteredTopics = topics.filter((topic) => {
-  //   const q = search.toLowerCase().trim();
-  //   if (q && !topic.title.toLowerCase().includes(q) && !topic.description?.toLowerCase().includes(q)) {
-  //     return false;
-  //   }
-  //   if (difficultyFilter && topic.difficulty_level !== difficultyFilter) {
-  //     return false;
-  //   }
-  //   return true;
-  // });
-
   return (
     <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
       <div className="max-w-5xl mx-auto w-full space-y-6">
@@ -198,7 +190,7 @@ export default function TopicManagement() {
                 Thêm đề tài
               </Button>
             </div>
-            
+
             <div className="w-full sm:w-30">
               <Button variant="primary" icon="fa-solid fa-rotate" onClick={loadTopics} loading={loading}>
                 Làm mới

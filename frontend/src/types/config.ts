@@ -17,6 +17,8 @@ export const STATUS_CONFIG: Record<string, { label: string; variant: BadgeVarian
   assigned_lecturer: { label: 'Chờ duyệt', variant: 'info' },
   approved: { label: 'Đã duyệt', variant: 'success' },
   rejected: { label: 'Từ chối', variant: 'danger' },
+  pending: { label: 'Chờ duyệt', variant: 'warning' },
+  skipped: { label: 'Không cần', variant: 'neutral' },
 };
 
 export const TRAINING_TYPE_MAP: Record<string, string> = {

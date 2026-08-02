@@ -11,12 +11,22 @@ import Select from '../components/Ui/Select';
 import Modal from '../components/Ui/Modal';
 import { STATUS_CONFIG } from '../types';
 import type { Registration, Lecturer, RegistrationPeriod } from '../types';
+import Dropdown from '../components/Ui/Dropdown';
+
+function effectiveStatusKey(reg: Registration): string {
+  if (reg.status === 'waiting_lecturer') return 'waiting_lecturer';
+  const main = reg.lecturer_assignments?.find((a) => a.role === 'main');
+  if (!main) return 'assigned_lecturer';  // still pending
+  if (main.approval_status === 'approved') return 'approved';
+  if (main.approval_status === 'rejected') return 'rejected';
+  return 'assigned_lecturer';  // pending
+}
 
 export default function ListStudentsAndRegistration() {
   const { openModal, closeModal } = useModal();
   const { user } = useUser();
   const [registrationPeriods, setRegistrationPeriods] = useState<RegistrationPeriod[]>([]);
-  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('');
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('current');
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [lecturers, setLecturers] = useState<Lecturer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,7 +37,7 @@ export default function ListStudentsAndRegistration() {
   const [statusFilter, setStatusFilter] = useState('');
   const [assigningReg, setAssigningReg] = useState<Registration | null>(null);
   const [selectedLecturer, setSelectedLecturer] = useState('');
-
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const isStaff = user?.role === 'staff';
 
   useEffect(() => {
@@ -49,16 +59,13 @@ export default function ListStudentsAndRegistration() {
       endpoints.registrationPeriods,
       (data: RegistrationPeriod[]) => {
         setRegistrationPeriods(data);
-        if (data.length > 0) {
-          setSelectedPeriodId(String(data[0].id));
-        }
       }, () => { }, {}, () => setPeriodsLoading(false));
   };
 
   const loadRegistrations = async () => {
     if (!selectedPeriodId) return;
     setLoading(true);
-    await fetchWithAuth(endpoints.registrations(selectedPeriodId), setRegistrations, () => { }, {}, () => setLoading(false));
+    await fetchWithAuth(endpoints.registrations(selectedPeriodId), (data) => { setRegistrations(data); }, () => { }, {}, () => setLoading(false));
   };
 
   const loadDetail = async (id: number, onSuccess: (data: Registration) => void) => {
@@ -83,12 +90,10 @@ export default function ListStudentsAndRegistration() {
     );
   };
 
-  const handleAssign = async () => {
-    if (!assigningReg || !selectedLecturer) return;
-    setAssignLoading(true);
+  const addLecturer = async (id: number) => {
     await updatePatchWithAuth(
-      endpoints.addLecturer(selectedPeriodId, assigningReg.id),
-      { lecturer_id: Number(selectedLecturer) },
+      endpoints.addLecturer(selectedPeriodId, id),
+      { lecturer_id: 33 },//Number(selectedLecturer)
       () => {
         loadRegistrations();
         setAssigningReg(null);
@@ -100,6 +105,12 @@ export default function ListStudentsAndRegistration() {
         console.log('Error raw:', raw);
       },
     );
+  }
+
+  const handleAssign = async () => {
+    if (!assigningReg || !selectedLecturer) return;
+    setAssignLoading(true);
+    await addLecturer(assigningReg.id);
     setAssignLoading(false);
   };
 
@@ -107,7 +118,11 @@ export default function ListStudentsAndRegistration() {
     setDetailLoading(true);
     loadDetail(reg.id, (data) => {
       const si = data.student_info || {};
-      const status = STATUS_CONFIG[data.status] || STATUS_CONFIG.waiting_lecturer;
+      const li = data.lecturer_info || [];
+      const status = STATUS_CONFIG[effectiveStatusKey(data)] || STATUS_CONFIG.waiting_lecturer;
+      const hasPendingMain = li.some((l) => l.role === 'main' && l.approval_status === 'pending');
+      const mainAssignment = li.find((l) => l.role === 'main');
+      const backupAssignment = li.find((l) => l.role === 'backup');
       openModal({
         title: `Chi tiết đăng ký`,
         description: data.project_title || '—',
@@ -165,7 +180,7 @@ export default function ListStudentsAndRegistration() {
                 </div>
                 <div>
                   <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Loại</p>
-                  <p className="text-sm text-gray-700">{data.isThesis ? 'Khóa luận tốt nghiệp' : 'Thực tập tốt nghiệp'}</p>
+                  <p className="text-sm text-gray-700">{data.is_Thesis ? 'Khóa luận tốt nghiệp' : 'Thực tập tốt nghiệp'}</p>
                 </div>
                 <div>
                   <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Trạng thái</p>
@@ -179,11 +194,50 @@ export default function ListStudentsAndRegistration() {
                 </div>
               )}
             </div>
+
+            {li.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                  <i className="fa-solid fa-chalkboard-user text-primary"></i>
+                  Giảng viên hướng dẫn
+                </h4>
+                <div className="space-y-2">
+                  {mainAssignment && (
+                    <div className="bg-blue-50/60 rounded-xl p-3.5 border border-blue-100">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-semibold text-blue-600 uppercase tracking-wide">Nguyện vọng 1</span>
+                        <Badge variant={STATUS_CONFIG[mainAssignment.approval_status]?.variant || 'warning'}>
+                          {STATUS_CONFIG[mainAssignment.approval_status]?.label || mainAssignment.approval_status}
+                        </Badge>
+                      </div>
+                      <p className="text-sm font-medium text-gray-800">{mainAssignment.full_name}</p>
+                      {mainAssignment.note && (
+                        <p className="text-xs text-gray-500 mt-1 italic">"{mainAssignment.note}"</p>
+                      )}
+                    </div>
+                  )}
+                  {backupAssignment && (
+                    <div className="bg-amber-50/60 rounded-xl p-3.5 border border-amber-100">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-semibold text-amber-600 uppercase tracking-wide">Nguyện vọng 2</span>
+                        <Badge variant={STATUS_CONFIG[backupAssignment.approval_status]?.variant || 'warning'}>
+                          {STATUS_CONFIG[backupAssignment.approval_status]?.label || backupAssignment.approval_status}
+                        </Badge>
+                      </div>
+                      <p className="text-sm font-medium text-gray-800">{backupAssignment.full_name}</p>
+                      {backupAssignment.note && (
+                        <p className="text-xs text-gray-500 mt-1 italic">"{backupAssignment.note}"</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         ),
         footer: (
           <div className="flex items-center gap-2">
-            {data.status === 'assigned_lecturer' && (
+            {hasPendingMain && (
               <>
                 <Button variant="success" size="sm" icon="fa-solid fa-check" onClick={() => { handleApprove(reg.id); closeModal(); }}>
                   Duyệt
@@ -204,10 +258,34 @@ export default function ListStudentsAndRegistration() {
     const studentName = reg.student?.full_name || reg.student_name || '';
     const studentId = reg.student?.student_id || reg.student_id || '';
     const q = search.toLowerCase();
+    if (statusFilter === 'all') return true;
     if (q && !studentName.toLowerCase().includes(q) && !studentId.toLowerCase().includes(q)) return false;
     if (statusFilter && reg.status !== statusFilter) return false;
     return true;
   });
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((r) => selectedIds.includes(r.id));
+
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !filtered.some((r) => r.id === id)));
+    } else {
+      setSelectedIds((prev) => [...new Set([...prev, ...filtered.map((r) => r.id)])]);
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleAddLecturers = async () => {
+    await Promise.all(
+      [...selectedIds].map((id) => addLecturer(id))
+    );
+    loadRegistrations();
+  };
 
   return (
     <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
@@ -219,7 +297,6 @@ export default function ListStudentsAndRegistration() {
 
         <Card variant="elevated" bodyClassName="space-y-4">
           <div className="flex flex-col sm:flex-row gap-4">
-
             <div className="flex-1">
               <Input
                 placeholder="Tìm kiếm theo tên hoặc MSSV..."
@@ -229,22 +306,26 @@ export default function ListStudentsAndRegistration() {
               />
             </div>
             <div className="w-full sm:w-64">
-              <Select
+              <Dropdown
                 placeholder={periodsLoading ? 'Đang tải...' : 'Chọn đợt đăng ký'}
                 value={selectedPeriodId}
-                onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedPeriodId(e.target.value)}
-                options={registrationPeriods.map((p) => ({
-                  value: String(p.id),
-                  label: `${p.name} (${p.academic_year})`,
-                }))}
+                onChange={(value) => setSelectedPeriodId(String(value))}
+                options={[
+                  { value: 'current', label: 'Đợt hiện tại (đang mở)' },
+                  ...registrationPeriods.map((p) => ({
+                    value: String(p.id),
+                    label: `${p.name} (${p.academic_year})`,
+                  })),
+                ]}
               />
             </div>
             <div className="w-full sm:w-48">
-              <Select
+              <Dropdown
                 value={statusFilter}
-                onChange={(e: ChangeEvent<HTMLSelectElement>) => setStatusFilter(e.target.value)}
+                onChange={(value) => setStatusFilter(String(value))}
                 placeholder="Tất cả trạng thái"
                 options={[
+                  { value: 'all', label: 'Tất cả' },
                   { value: 'waiting_lecturer', label: 'Chờ phân GV' },
                   { value: 'assigned_lecturer', label: 'Chờ duyệt' },
                   { value: 'approved', label: 'Đã duyệt' },
@@ -252,11 +333,9 @@ export default function ListStudentsAndRegistration() {
                 ]}
               />
             </div>
-            <div className="flex items-end">
-              <Button variant="primary" icon="fa-solid fa-rotate" onClick={loadRegistrations} loading={loading}>
-                Làm mới
-              </Button>
-            </div>
+            <Button variant="primary" icon="fa-solid fa-rotate" onClick={loadRegistrations} loading={loading}>
+              Làm mới
+            </Button>
           </div>
         </Card>
 
@@ -280,6 +359,17 @@ export default function ListStudentsAndRegistration() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 text-left">
+                    {registrations.some((registration) => registration.status === "waiting_lecturer") && statusFilter === "waiting_lecturer" && (
+                      <th className="pb-3 pr-2 w-10">
+                        <input
+                          type="checkbox"
+                          checked={allFilteredSelected}
+                          onChange={toggleSelectAll}
+                          className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
+                        />
+                      </th>
+                    )}
+
                     <th className="pb-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">MSSV</th>
                     <th className="pb-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Họ tên</th>
                     <th className="pb-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Đề tài</th>
@@ -290,9 +380,21 @@ export default function ListStudentsAndRegistration() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {filtered.map((reg) => {
-                    const status = STATUS_CONFIG[reg.status] || STATUS_CONFIG.waiting_lecturer;
+                    const status = STATUS_CONFIG[effectiveStatusKey(reg)] || STATUS_CONFIG.waiting_lecturer;
+                    const checked = selectedIds.includes(reg.id);
                     return (
-                      <tr key={reg.id} className="hover:bg-gray-50/50 transition-colors">
+                      <tr key={reg.id} className={`hover:bg-gray-50/50 transition-colors ${checked ? 'bg-primary/5' : ''}`}>
+
+                        {registrations.some((registration) => registration.status === "waiting_lecturer") && statusFilter === "waiting_lecturer" && (
+                          <td className="py-3.5 pr-2">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleSelect(reg.id)}
+                              className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/30 cursor-pointer"
+                            />
+                          </td>
+                        )}
                         <td className="py-3.5 pr-4">
                           <span className="font-mono text-sm text-gray-800">{reg.student?.student_id || reg.student_id || '—'}</span>
                         </td>
@@ -349,13 +451,26 @@ export default function ListStudentsAndRegistration() {
             </div>
           )}
         </Card>
-        {selectedPeriodId && statusFilter === "waiting_lecturer" && registrations.length > 0 && (
+
+        {selectedPeriodId && statusFilter === "waiting_lecturer" && registrations.some((registration) => registration.status === "waiting_lecturer") && (
+          <div className="flex justify-between items-center gap-4 mt-2">
+            <div className="flex items-end gap-1">
+              {selectedIds.length > 0 && (
+                <span className="text-xs text-gray-500 whitespace-nowrap py-2">
+                  Đã chọn <strong className="text-primary">{selectedIds.length}</strong> sinh viên
+                </span>
+              )}
+            </div>
             <div className="flex justify-end overflow-x-auto">
-              <Button variant="primary" icon="fa-solid fa-rotate" onClick={loadRegistrations} loading={loading}>
+              <Button variant="primary" icon="fa-solid fa-rotate" onClick={()=>{
+                handleAddLecturers();
+              }} loading={loading}>
                 Phân giảng viên hướng dẫn
               </Button>
             </div>
+          </div>
         )}
+
       </div>
 
       <Modal

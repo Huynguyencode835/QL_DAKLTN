@@ -288,7 +288,7 @@
     "lecturer_list_own_topics": {
       "_api": "GET /api/users/topics/",
       "_auth": "lecturer (giảng viên)",
-      "_note": "GV xem danh sách đề tài của mình.",
+      "_note": "GV xem danh sách đề tài của mình. ListOfTopicsSerializer chỉ trả về id, title, description. Dùng GET {id}/ (DetailSerializer) để lấy thêm technology, difficulty_level.",
       "_response_example": [
         {
           "id": 1,
@@ -302,8 +302,7 @@
           "title": "Ứng dụng AI trong nhận diện khuôn mặt",
           "description": "Nghiên cứu và phát triển ứng dụng nhận diện khuôn mặt..."
         }
-      ],
-      "_note": "ListOfTopicsSerializer chỉ trả về id, title, description. Dùng GET {id}/ (DetailSerializer) để lấy thêm technology, difficulty_level."
+      ]
     },
 
     "lecturer_delete_topic": {
@@ -459,91 +458,134 @@
     }
   },
 
+  "specializations": {
+    "_comment": "=== DANH SÁCH SPECIALIZATION (dùng để test filter và gán vào registration) ===",
+    "_api": "GET /api/specializations/?faculty=1",
+    "_note": "Seed sẵn để gán vào ProjectRegistration.specialization và LecturerProfile.specializations. specialization.faculty phải khớp faculty của SV khi tạo registration (validate ở clean()).",
+    "data": [
+      { "id": 1, "name": "Khoa học máy tính", "faculty": 1 },
+      { "id": 2, "name": "Công nghệ phần mềm", "faculty": 1 },
+      { "id": 3, "name": "Trí tuệ nhân tạo", "faculty": 1 },
+      { "id": 4, "name": "Marketing", "faculty": 2 }
+    ]
+  },
+
   "registrations": {
     "_comment": "=== API PROJECT REGISTRATION (Đăng ký đề tài) ===",
 
     "statuses": {
-      "_note": "Các trạng thái của phiếu đăng ký",
-      "pending":          "pending           - Chờ duyệt",
-      "waiting_lecturer": "waiting_lecturer  - Chờ phân giảng viên hướng dẫn",
-      "assigned_lecturer":"assigned_lecturer - Đã phân giảng viên hướng dẫn",
-      "approved":         "approved          - Đã duyệt",
-      "rejected":         "rejected          - Bị từ chối"
+      "_note": "Trạng thái của ProjectRegistration — CHỈ 2 giá trị, khớp model.STATUS",
+      "waiting_lecturer": "waiting_lecturer - Chờ phân giảng viên hướng dẫn",
+      "assigned_lecturer": "assigned_lecturer - Đã phân giảng viên hướng dẫn"
+    },
+
+    "lecturer_approval_statuses": {
+      "_note": "Trạng thái duyệt của TỪNG giảng viên trong RegistrationLecturer — không nằm trên ProjectRegistration",
+      "pending": "pending - Chờ duyệt",
+      "approved": "approved - Đồng ý",
+      "rejected": "rejected - Từ chối",
+      "skipped": "skipped - Không cần duyệt"
+    },
+
+    "lecturer_roles": {
+      "_note": "Vai trò của giảng viên gắn với 1 registration, unique theo (registration, role) và (registration, lecturer)",
+      "main": "main - Chính thức (GVHD)",
+      "option1": "option1 - Tùy chọn 1",
+      "option2": "option2 - Tùy chọn 2",
+      "reviewer": "reviewer - Phản biện"
     },
 
     "quy_trinh": {
-      "_note": "Luồng xử lý phiếu đăng ký",
-      "step_1": "SV tạo phiếu -> status = pending, lecturer = null",
-      "step_2": "Staff phân GVHD -> PATCH /api/registrations/{id}/add_lecturer/ -> status = assigned_lecturer",
-      "step_3": "GVHD duyệt -> PATCH /api/registrations/{id}/approve/ -> status = approved",
-      "step_4": "GVHD từ chối -> PATCH /api/registrations/{id}/reject/ -> status = rejected, lecturer = null"
+      "_note": "Luồng xử lý phiếu đăng ký, đúng theo model ProjectRegistration + RegistrationLecturer. Tất cả các action lồng trong đợt: /api/registration-periods/{period_pk}/registrations/{reg_pk}/...",
+      "step_1": "SV tạo phiếu -> ProjectRegistration.status = waiting_lecturer, chưa có RegistrationLecturer nào (POST /api/registration-periods/current/registrations/)",
+      "step_2": "SV chọn nguyện vọng -> tạo RegistrationLecturer (role=option1/option2, approval_status=pending) ngay trong lúc tạo phiếu (advisor1/advisor2)",
+      "step_3": "GVHD (role=option1/option2) duyệt -> PATCH /api/registration-periods/{period_pk}/registrations/{reg_pk}/approve -> approval_status=approved, responded_at=now(). Nếu option1 duyệt: option1 -> MAIN, ProjectRegistration.status=assigned_lecturer, option2 -> skipped",
+      "step_4": "GVHD từ chối -> PATCH .../reject -> approval_status=rejected, responded_at=now(). Cả 2 nguyện vọng từ chối -> status vẫn waiting_lecturer để staff phân GV khác",
+      "step_5": "Staff phân GV trực tiếp -> PATCH .../add_lecturer với body {\"lecturer_id\": <id>} -> tạo RegistrationLecturer role=main approval_status=approved, status=assigned_lecturer",
+      "step_6_optional": "Staff có thể thêm phản biện (role=reviewer) khi tạo hội đồng; mỗi role chỉ 1 dòng cho mỗi registration (unique_role_per_registration)"
     },
 
     "create_registration": {
-      "_api": "POST /api/registrations/",
+      "_api": "POST /api/registration-periods/current/registrations/",
       "_auth": "student (sinh viên)",
-      "_note": "SV tạo phiếu đăng ký. Nếu isThesis=true và có nguyện vọng chọn GV, gửi kèm lecturer (user_id). Lecturer phải cùng khoa với SV.",
-      "_body_example_with_lecturer": {
+      "_note": "SV tạo phiếu đăng ký. Có thể gửi advisor1/advisor2 (id GV nguyện vọng) + note1/note2, hoặc bỏ trống để staff phân sau. advisor1/advisor2 tạo RegistrationLecturer role=option1/option2, approval_status=pending.",
+      "_body_example": {
         "project_title": "Xây dựng hệ thống quản lý khóa luận tốt nghiệp",
         "project_description": "Em muốn thực hiện đề tài này...",
-        "isThesis": true,
-        "lecturer": 3
+        "is_thesis": true,
+        "specialization": 2,
+        "advisor1": 3,
+        "note1": "Mong thầy/cô nhận em"
       },
-      "_body_example_without_lecturer": {
+      "_response_example": {
+        "id": 1,
+        "student": 2,
+        "specialization": { "id": 2, "name": "Công nghệ phần mềm", "faculty": 1 },
         "project_title": "Xây dựng hệ thống quản lý khóa luận tốt nghiệp",
         "project_description": "Em muốn thực hiện đề tài này...",
-        "isThesis": true
+        "status": "waiting_lecturer",
+        "is_thesis": true,
+        "created_date": "2026-07-15T10:00:00Z",
+        "updated_date": "2026-07-15T10:00:00Z",
+        "active": true
       }
     },
 
     "create_registration_2": {
-      "_api": "POST /api/registrations/",
-      "_note": "isThesis = false -> không làm KLTN, không cần GVHD",
+      "_api": "POST /api/registration-periods/current/registrations/",
+      "_note": "Thêm data test filter theo specialization=2 (trùng với phiếu 1).",
       "_body_example": {
         "project_title": "Ứng dụng Blockchain trong lưu trữ văn bằng",
         "project_description": "Nghiên cứu ứng dụng công nghệ blockchain để lưu trữ và xác thực văn bằng tốt nghiệp.",
-        "isThesis": false
+        "is_thesis": false,
+        "specialization": 2
+      }
+    },
+
+    "create_registration_3": {
+      "_api": "POST /api/registration-periods/current/registrations/",
+      "_note": "Test filter specialization=3 (Trí tuệ nhân tạo) — khác specialization với 2 phiếu trên.",
+      "_body_example": {
+        "project_title": "Ứng dụng AI trong nhận diện khuôn mặt",
+        "project_description": "Em muốn nghiên cứu và triển khai mô hình deep learning cho bài toán nhận diện khuôn mặt.",
+        "is_thesis": true,
+        "specialization": 3
       }
     },
 
     "list_registrations": {
-      "_api": "GET /api/registrations/",
+      "_api": "GET /api/registration-periods/current/registrations/",
       "_auth": "authenticated user",
-      "_note": "Student: chỉ xem phiếu của mình. Lecturer: chỉ xem phiếu mình hướng dẫn. Staff: xem phiếu cùng khoa.",
+      "_note": "Student: chỉ xem phiếu của mình. Lecturer: chỉ xem phiếu mình có mặt trong lecturer_assignments. Staff: xem phiếu cùng khoa. Hỗ trợ query ?specialization=<id>.",
       "_response_example_student": [
         {
           "id": 1,
           "student": 2,
-          "lecturer": null,
+          "specialization": { "id": 2, "name": "Công nghệ phần mềm", "faculty": 1 },
           "project_title": "Xây dựng hệ thống quản lý khóa luận tốt nghiệp",
-          "project_description": "Em muốn thực hiện đề tài này...",
-          "status": "pending",
-          "isThesis": true,
+          "status": "waiting_lecturer",
+          "is_thesis": true,
           "created_date": "2026-07-15T10:00:00Z",
           "updated_date": "2026-07-15T10:00:00Z",
-          "active": true
-        }
-      ],
-      "_response_example_lecturer": [
-        {
-          "id": 1,
-          "student": 2,
-          "lecturer": 3,
-          "project_title": "Xây dựng hệ thống quản lý khóa luận tốt nghiệp",
-          "project_description": "Em muốn thực hiện đề tài này...",
-          "status": "assigned_lecturer",
-          "isThesis": true,
-          "created_date": "2026-07-15T10:00:00Z",
-          "updated_date": "2026-07-15T11:00:00Z",
           "active": true
         }
       ]
     },
 
+    "list_registrations_by_specialization": {
+      "_api": "GET /api/registration-periods/current/registrations/?specialization=2",
+      "_auth": "staff | lecturer",
+      "_note": "Lọc theo chuyên ngành — test với create_registration (spec=2) và create_registration_2 (spec=2), khác create_registration_3 (spec=3).",
+      "_response_example": [
+        { "id": 1, "specialization": { "id": 2, "name": "Công nghệ phần mềm", "faculty": 1 }, "status": "waiting_lecturer" },
+        { "id": 2, "specialization": { "id": 2, "name": "Công nghệ phần mềm", "faculty": 1 }, "status": "waiting_lecturer" }
+      ]
+    },
+
     "retrieve_registration": {
-      "_api": "GET /api/registrations/1/",
-      "_auth": "student (chủ phiếu) | lecturer (GVHD) | staff (cùng khoa)",
-      "_note": "Xem chi tiết đăng ký (dùng DetailSerializer). Faculty lấy từ user.",
+      "_api": "GET /api/registration-periods/current/registrations/1/",
+      "_auth": "student (chủ phiếu) | lecturer (có trong lecturer_assignments) | staff (cùng khoa)",
+      "_note": "lecturer_assignments trả về danh sách RegistrationLecturer gắn với phiếu này. Faculty lấy từ user.",
       "_response_example": {
         "id": 1,
         "student": 2,
@@ -556,13 +598,13 @@
           "major": "Kỹ thuật phần mềm",
           "faculty": "Công nghệ thông tin"
         },
-        "lecturer": null,
-        "lecturer_info": null,
+        "specialization": { "id": 2, "name": "Công nghệ phần mềm", "faculty": 1 },
         "project_title": "Xây dựng hệ thống quản lý khóa luận tốt nghiệp",
         "project_description": "Em muốn thực hiện đề tài này...",
-        "status": "pending",
-        "status_display": "Chờ duyệt",
-        "isThesis": true,
+        "status": "waiting_lecturer",
+        "status_display": "Chờ phân giảng viên hướng dẫn",
+        "is_thesis": true,
+        "lecturer_assignments": [],
         "created_date": "2026-07-15T10:00:00Z",
         "updated_date": "2026-07-15T10:00:00Z",
         "active": true
@@ -570,75 +612,83 @@
     },
 
     "add_lecturer": {
-      "_api": "PATCH /api/registrations/1/add_lecturer/",
+      "_api": "PATCH /api/registration-periods/{period_pk}/registrations/1/add_lecturer",
       "_auth": "staff (cùng khoa với SV)",
-      "_note": "Staff phân giảng viên hướng dẫn cho phiếu. GV được phân phải cùng khoa với SV. Status tự động thành assigned_lecturer.",
+      "_note": "Staff phân GV trực tiếp. Tạo RegistrationLecturer role=main approval_status=approved (không cần GV duyệt nữa). Các nguyện vọng option1/option2 đang pending bị chuyển thành skipped. ProjectRegistration.status tự động thành assigned_lecturer.",
       "_body_example": {
         "lecturer_id": 3
       },
       "_response_example": {
         "id": 1,
-        "student": 2,
-        "student_info": { "...": "..." },
+        "registration": 1,
         "lecturer": 3,
-        "lecturer_info": {
-          "id": 3,
-          "full_name": "Trần Thị Bình",
-          "email": "lecturer1@ou.edu.vn",
-          "academic_degree": "Tiến sĩ",
-          "specializations": ["Khoa học máy tính"]
-        },
-        "status": "assigned_lecturer",
-        "status_display": "Đã phân giảng viên hướng dẫn",
-        "isThesis": true,
-        "created_date": "2026-07-15T10:00:00Z",
-        "updated_date": "2026-07-15T11:00:00Z",
-        "active": true
-      }
+        "lecturer_info": [
+          {
+            "id": 1,
+            "lecturer_id": 3,
+            "full_name": "Trần Thị Bình",
+            "email": "lecturer1@ou.edu.vn",
+            "academic_degree": "Tiến sĩ",
+            "specializations": ["Khoa học máy tính"],
+            "role": "main",
+            "approval_status": "approved",
+            "note": null
+          }
+        ],
+        "role": "main",
+        "role_display": "Chính thức",
+        "approval_status": "approved",
+        "responded_at": "2026-07-15T11:00:00Z"
+      },
+      "_side_effect": "GET /api/registration-periods/{period_pk}/registrations/1/ -> status = assigned_lecturer"
     },
 
     "approve_registration": {
-      "_api": "PATCH /api/registrations/1/approve/",
-      "_auth": "giảng viên hướng dẫn (GV đã được phân qua add_lecturer)",
-      "_note": "GVHD duyệt phiếu. Chỉ GV đã được phân công mới có quyền duyệt.",
+      "_api": "PATCH /api/registration-periods/{period_pk}/registrations/1/approve",
+      "_auth": "giảng viên có nguyện vọng (role=option1 hoặc option2) đang pending cho phiếu này",
+      "_note": "GVHD duyệt nguyện vọng. Set approval_status=approved, responded_at=now(). Nếu option1 duyệt -> option1 thành MAIN, status=assigned_lecturer, option2 bị skipped. Trả về ProjectRegistrationDetailSerializer.",
       "_response_example": {
         "id": 1,
-        "student": 2,
-        "student_info": { "...": "..." },
-        "lecturer": 3,
-        "lecturer_info": {
-          "id": 3,
-          "full_name": "Trần Thị Bình",
-          "email": "lecturer1@ou.edu.vn",
-          "academic_degree": "Tiến sĩ",
-          "specializations": ["Khoa học máy tính"]
-        },
-        "status": "approved",
-        "status_display": "Đã duyệt",
-        "isThesis": true,
-        "created_date": "2026-07-15T10:00:00Z",
-        "updated_date": "2026-07-15T12:00:00Z",
-        "active": true
+        "status": "assigned_lecturer",
+        "status_display": "Đã phân giảng viên hướng dẫn",
+        "lecturer_assignments": [
+          {
+            "id": 1,
+            "lecturer": 3,
+            "role": "main",
+            "approval_status": "approved",
+            "note": null
+          }
+        ]
       }
     },
 
     "reject_registration": {
-      "_api": "PATCH /api/registrations/1/reject/",
-      "_auth": "giảng viên hướng dẫn (GV đã được phân qua add_lecturer)",
-      "_note": "GVHD từ chối phiếu. lecturer tự động set về null.",
+      "_api": "PATCH /api/registration-periods/{period_pk}/registrations/1/reject",
+      "_auth": "giảng viên có nguyện vọng (role=option1/option2) đang pending",
+      "_note": "GVHD từ chối. Set approval_status=rejected, responded_at=now(), note ghi lý do. Nếu option1 từ chối và option2 đã approved -> option2 thành MAIN. Nếu cả 2 từ chối -> status=waiting_lecturer để staff phân GV khác. RegistrationLecturer bị reject không xoá, giữ lịch sử.",
+      "_body_example": {
+        "note": "Đề tài không phù hợp với hướng nghiên cứu hiện tại của tôi."
+      },
       "_response_example": {
         "id": 1,
-        "student": 2,
-        "student_info": { "...": "..." },
-        "lecturer": null,
-        "lecturer_info": null,
-        "status": "rejected",
-        "status_display": "Bị từ chối",
-        "isThesis": true,
-        "created_date": "2026-07-15T10:00:00Z",
-        "updated_date": "2026-07-15T12:00:00Z",
-        "active": true
+        "status": "waiting_lecturer",
+        "status_display": "Chờ phân giảng viên hướng dẫn",
+        "lecturer_assignments": [
+          {
+            "id": 1,
+            "lecturer": 3,
+            "role": "option1",
+            "approval_status": "rejected",
+            "note": "Đề tài không phù hợp với hướng nghiên cứu hiện tại của tôi."
+          }
+        ]
       }
+    },
+
+    "add_reviewer": {
+      "_note": "Phản biện (role=reviewer) không có endpoint gán riêng — được thêm thông qua tạo CommitteeMember khi staff lập hội đồng chấm (Committee.registrations gắn các registration). RegistrationLecturer role=reviewer cũng có thể được tạo trực tiếp trong DB/admin.",
+      "_model_note": "RegistrationLecturer.role choices: main/option1/option2/reviewer. unique_role_per_registration chỉ cho phép 1 dòng mỗi role mỗi phiếu."
     }
   },
 
@@ -646,51 +696,53 @@
     "_comment": "=== LUỒNG TEST ĐỀ XUẤT ===",
 
     "section_1_student": {
-      "step_1_auth":         "Lấy token student1, POST /o/token/",
-      "step_2_create":       "POST /api/registrations/ (isThesis = true)",
-      "step_3_create_2":     "POST /api/registrations/ (isThesis = false)",
-      "step_4_list":         "GET /api/registrations/ (chỉ thấy phiếu của mình)",
-      "step_5_detail":       "GET /api/registrations/1/"
+      "step_1_auth":     "Lấy token student1, POST /o/token/",
+      "step_2_create":   "POST /api/registration-periods/current/registrations/ (advisor1/advisor2, specialization=2)",
+      "step_3_create_2": "POST /api/registration-periods/current/registrations/ (specialization=2, is_thesis=false)",
+      "step_4_create_3": "POST /api/registration-periods/current/registrations/ (specialization=3)",
+      "step_5_list":     "GET /api/registration-periods/current/registrations/ (chỉ thấy phiếu của mình)",
+      "step_6_detail":   "GET /api/registration-periods/current/registrations/1/ (status=waiting_lecturer, lecturer_assignments=[option1/option2])"
     },
 
     "section_2_staff": {
-      "step_6_auth":         "Lấy token staff1, POST /o/token/",
-      "step_7_list":         "GET /api/registrations/ (chỉ thấy phiếu cùng khoa)",
-      "step_8_add_lecturer": "PATCH /api/registrations/1/add_lecturer/ {\"lecturer_id\": 3}"
+      "step_7_auth":         "Lấy token staff1, POST /o/token/",
+      "step_8_list":         "GET /api/registration-periods/current/registrations/ (chỉ thấy phiếu cùng khoa)",
+      "step_9_filter_spec":  "GET /api/specialization/?faculty=1 (lọc specialization của khoa)",
+      "step_10_add_lecturer":"PATCH /api/registration-periods/current/registrations/1/add_lecturer {\"lecturer_id\": 3} -> status = assigned_lecturer"
     },
 
     "section_3_lecturer": {
-      "step_9_auth_lecturer":          "Lấy token lecturer1, POST /o/token/",
-      "step_10_list_registrations":    "GET /api/registrations/ (chỉ thấy phiếu mình hướng dẫn)",
-      "step_11_approve":               "PATCH /api/registrations/1/approve/",
-      "step_12_create_topic":          "POST /api/users/topics/ (body có technology + difficulty_level)",
-      "step_13_list_own_topics":       "GET /api/users/topics/",
-      "step_14_list_lecturers":        "GET /api/lecturers/ (5 lecturers)",
-      "step_15_lecturer_detail":       "GET /api/lecturers/3/",
-      "step_16_view_lecturer_topics":  "GET /api/lecturers/3/topics/",
-      "step_17_view_topic_detail":     "GET /api/lecturers/3/topics/1/ (có technology, difficulty_level)",
-      "step_18_delete_topic":          "DELETE /api/users/topics/1/"
+      "step_12_auth_lecturer":         "Lấy token lecturer1, POST /o/token/",
+      "step_13_list_registrations":    "GET /api/registration-periods/current/registrations/ (chỉ thấy phiếu mình có trong lecturer_assignments)",
+      "step_14_approve":               "PATCH /api/registration-periods/current/registrations/{reg_pk}/approve (GV có role=option1/option2 duyệt)",
+      "step_15_create_topic":          "POST /api/users/topics/ (body có technology + difficulty_level)",
+      "step_16_list_own_topics":       "GET /api/users/topics/",
+      "step_17_list_lecturers":        "GET /api/lecturers/ (5 lecturers)",
+      "step_18_lecturer_detail":       "GET /api/lecturers/3/",
+      "step_19_view_lecturer_topics":  "GET /api/lecturers/3/topics/",
+      "step_20_view_topic_detail":     "GET /api/lecturers/3/topics/1/",
+      "step_21_delete_topic":          "DELETE /api/users/topics/1/"
     },
 
     "section_4_other_lecturers": {
       "_comment": "=== XEM THÔNG TIN CÁC GIẢNG VIÊN KHÁC ===",
-      "step_19_lecturer2_detail":     "GET /api/lecturers/4/ (Nguyễn Hoàng Long - AI)",
-      "step_20_lecturer3_detail":     "GET /api/lecturers/5/ (Lê Minh Quân - Spring Boot)",
-      "step_21_lecturer4_detail":     "GET /api/lecturers/6/ (Hoàng Thị Lan - PGS)",
-      "step_22_lecturer5_detail":     "GET /api/lecturers/7/ (Võ Văn Tuấn - Khoa Kinh tế)",
-      "step_23_lecturer2_topics":     "GET /api/lecturers/4/topics/ (4 topics)",
-      "step_24_lecturer3_topics":     "GET /api/lecturers/5/topics/ (3 topics)",
-      "step_25_lecturer4_topics":     "GET /api/lecturers/6/topics/ (3 topics)",
-      "step_26_lecturer5_topics":     "GET /api/lecturers/7/topics/ (2 topics)",
-      "step_27_topic_detail_easy":    "GET /api/lecturers/5/topics/9/ (difficulty_level = easy)",
-      "step_28_topic_detail_hard":    "GET /api/lecturers/4/topics/4/ (difficulty_level = hard)",
-      "step_29_filter_lecturers_faculty": "GET /api/lecturers/?faculty=2 (chỉ GV khoa Kinh tế)",
-      "step_30_topic_desc_search":    "GET /api/lecturers/?search=blockchain (lọc theo từ khoá)"
+      "step_22_lecturer2_detail":         "GET /api/lecturers/4/ (Nguyễn Hoàng Long - AI)",
+      "step_23_lecturer3_detail":         "GET /api/lecturers/5/ (Lê Minh Quân - Spring Boot)",
+      "step_24_lecturer4_detail":         "GET /api/lecturers/6/ (Hoàng Thị Lan - PGS)",
+      "step_25_lecturer5_detail":         "GET /api/lecturers/7/ (Võ Văn Tuấn - Khoa Kinh tế)",
+      "step_26_lecturer2_topics":         "GET /api/lecturers/4/topics/ (4 topics)",
+      "step_27_lecturer3_topics":         "GET /api/lecturers/5/topics/ (3 topics)",
+      "step_28_lecturer4_topics":         "GET /api/lecturers/6/topics/ (3 topics)",
+      "step_29_lecturer5_topics":         "GET /api/lecturers/7/topics/ (2 topics)",
+      "step_30_topic_detail_easy":        "GET /api/lecturers/5/topics/9/ (difficulty_level = easy)",
+      "step_31_topic_detail_hard":        "GET /api/lecturers/4/topics/4/ (difficulty_level = hard)",
+      "step_32_filter_lecturers_faculty": "GET /api/lecturers/?faculty=2 (chỉ GV khoa Kinh tế)",
+      "step_33_topic_desc_search":        "GET /api/lecturers/?search=blockchain (lọc theo từ khoá)"
     },
 
     "section_5_reject": {
-      "step_19_staff_add_lecturer_again": "PATCH /api/registrations/2/add_lecturer/ {\"lecturer_id\": 3}",
-      "step_20_lecturer_reject":          "PATCH /api/registrations/2/reject/ (lecturer tự động về null)"
+      "step_34_staff_add_lecturer_2": "PATCH /api/registration-periods/current/registrations/2/add_lecturer {\"lecturer_id\": 3} -> status = assigned_lecturer",
+      "step_35_lecturer_reject":      "PATCH /api/registration-periods/current/registrations/{reg_pk}/reject {\"note\": \"...\"} -> status quay lại waiting_lecturer, RegistrationLecturer vẫn còn (approval_status=rejected)"
     }
   }
 }

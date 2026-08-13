@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useUser } from '../hooks';
+import { useUser, usePageHeaderValue } from '../hooks';
 import SidebarItem from '../components/Layout/SidebarItem';
 import Input from '../components/Ui/Input';
 import Button from '../components/Ui/Button';
@@ -10,8 +10,9 @@ const menuConfig: Record<string, any> = {
       group: 'Quản lý',
       items: [
         { label: 'Quản lý tiến độ', icon: 'fa-chart-line', path: '/' },
+        { label: 'Đợt đồ án/khóa luận', icon: 'fa-chart-line', path: '/period' },
         { label: 'Đăng ký đồ án & khóa luận', icon: 'fa-file-contract', path: '/topic-registration' },
-        // { label: 'Nộp báo cáo định kỳ', icon: 'fa-calendar-check', path: '/submit-weekly-reports' },
+        { label: 'Nộp báo cáo', icon: 'fa-cloud-arrow-up', path: '/reports' },
         // {
         //   label: 'Nộp báo cáo',
         //   icon: 'fa-cloud-arrow-up',
@@ -40,7 +41,8 @@ const menuConfig: Record<string, any> = {
     {
       group: 'Giảng dạy',
       items: [
-        { label: 'Dashboard', icon: 'fa-house', path: '/' },
+        // { label: 'Dashboard', icon: 'fa-house', path: '/' },
+        { label: 'Đợt đồ án/khóa luận', icon: 'fa-chart-line', path: '/period' },
         { label: 'Quản lý danh sách sinh viên', icon: 'fa-users', path: '/students' },
         { label: 'Quản lý đăng ký đề tài', icon: 'fa-list-check', path: '/topic-management' },
       ],
@@ -62,7 +64,7 @@ const menuConfig: Record<string, any> = {
     {
       group: 'Quản lý',
       items: [
-        { label: 'Dashboard', icon: 'fa-house', path: '/' },
+        // { label: 'Dashboard', icon: 'fa-house', path: '/' },
         { label: 'Danh sách sinh viên & đăng ký', icon: 'fa-users', path: '/students' },
         { label: 'Quản lý đợt đăng ký', icon: 'fa-folder-tree', path: '/registration-periods' },
       ],
@@ -127,6 +129,7 @@ export default function MainLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, loading } = useUser();
+  const { header } = usePageHeaderValue();
 
   if (loading) {
     return (
@@ -212,17 +215,15 @@ export default function MainLayout() {
       </aside>
 
       <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-        <header className="bg-white/85 backdrop-blur-md border-b border-border h-16 flex items-center justify-between px-6 shrink-0 z-10 sticky top-0 shadow-[0_1px_10px_rgba(15,23,42,0.05)]">
-          <div>
+        <header className="bg-white/85 backdrop-blur-md border-b border-border min-h-16 py-2.5 flex items-center justify-between px-6 shrink-0 z-10 sticky top-0 shadow-[0_1px_10px_rgba(15,23,42,0.05)]">
+          <div className="min-w-0">
             <div className="text-[10px] text-[#1657d1] font-semibold uppercase tracking-[0.18em]">{meta.badge}</div>
-            <h2 className="text-lg font-bold text-textMain leading-tight tracking-tight">Trang Chủ</h2>
+            <h2 className="text-lg font-bold text-textMain leading-tight tracking-tight truncate">{header.title}</h2>
+            {header.description && (
+              <p className="text-xs text-gray-500 mt-0.5 truncate max-w-xl">{header.description}</p>
+            )}
           </div>
           <div className="flex items-center gap-5">
-            <Input
-              placeholder="Tìm kiếm..."
-              leadingIcon="fa-solid fa-magnifying-glass"
-              className="w-56"
-            />
             <Button variant="ghost" size="icon" className="relative text-gray-400" icon="fa-regular fa-bell">
               <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-danger text-white text-[9px] font-bold rounded-full flex items-center justify-center ring-2 ring-white shadow-sm">
                 3

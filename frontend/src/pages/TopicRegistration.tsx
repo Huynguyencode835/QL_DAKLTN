@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useUser } from '../hooks';
-import { useModal } from '../hooks';
+import { useUser, useModal, usePageHeader } from '../hooks';
 import { fetchWithAuth, createWithAuth } from '../utils/ApiHelper';
 import { endpoints } from '../config/Apis';
 import { SectionCard } from '../components/Ui/Card';
@@ -39,9 +38,19 @@ export default function TopicRegistration() {
   const [existingRegistration, setExistingRegistration] = useState<any | null>(null);
   const [loadingReg, setLoadingReg] = useState(true);
 
+  usePageHeader(existingRegistration
+    ? {
+      title: 'Đăng ký Đồ án tốt nghiệp',
+      description: 'Thông tin đăng ký hiện tại của bạn',
+    }
+    : {
+      title: 'Đăng ký Đồ án tốt nghiệp',
+      description: 'Vui lòng điền đầy đủ và chính xác thông tin để đăng ký đề tài tốt nghiệp.',
+    });
+
   const update = (field: string) => (e: any) => setForm(prev => ({ ...prev, [field]: e.target?.value ?? e }));
 
-  
+
   useEffect(() => {
     if (!user) return;
     setForm(prev => ({
@@ -161,7 +170,7 @@ export default function TopicRegistration() {
     const body: any = {
       project_title: form.project_title || form.project_description,
       project_description: form.project_description,
-      is_Thesis: form.isThesis === 'true',
+      wants_thesis_upgrade: form.isThesis === 'true',
       advisor1: form.advisor1 ? parseInt(form.advisor1) : null,
       advisor2: form.advisor2 ? parseInt(form.advisor2) : null,
       note1: form.note1 || '',
@@ -191,8 +200,8 @@ export default function TopicRegistration() {
   const lecturer2 = lecturers.find(l => l.id == form.advisor2);
   const hasSuggestions = (form.advisor1 && topics1.length > 0) || (form.advisor2 && topics2.length > 0);
 
-  const statusCfg = STATUS_CONFIG[existingRegistration?.status] || {};
-  const thesisLabel = existingRegistration?.is_Thesis ? 'Khóa luận tốt nghiệp' : 'Hình thức khác';
+  const statusCfg = STATUS_CONFIG[existingRegistration?.status] || ({} as { label: string; variant: string });
+  const thesisLabel = existingRegistration?.wants_thesis_upgrade ? 'Khóa luận tốt nghiệp' : 'Hình thức khác';
 
   if (loadingReg) {
     return (
@@ -208,90 +217,143 @@ export default function TopicRegistration() {
   if (existingRegistration) {
     return (
       <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
-        <div className="space-y-8 max-w-4xl mx-auto w-full">
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-1">Đăng ký Đồ án tốt nghiệp</h2>
-              <p className="text-sm text-gray-500">Thông tin đăng ký hiện tại của bạn</p>
+        <div className="max-w-3xl mx-auto w-full">
+          <Card
+            variant="elevated"
+            className="!p-0 overflow-hidden !rounded-2xl"
+            bodyClassName="divide-y divide-gray-100"
+          >
+            {/* Header dùng chính prop title/icon/actions của Card */}
+            <div className="flex items-start justify-between gap-3 px-6 py-5">
+              <div className="flex items-start gap-2.5">
+                <span className="w-8 h-8 shrink-0 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <i className="fa-regular fa-file-lines text-sm" />
+                </span>
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-sm leading-tight">
+                    Đơn đăng ký luận văn
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">{thesisLabel}</p>
+                </div>
+              </div>
+              <Badge variant={statusCfg.variant as any}>
+                {statusCfg.label || existingRegistration.status}
+              </Badge>
             </div>
-            <Badge variant={statusCfg.variant as any}>{statusCfg.label || existingRegistration.status}</Badge>
-          </div>
 
-          <SectionCard title="Thông tin sinh viên" icon="fa-regular fa-user">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Input label="Mã số sinh viên" value={p.student_id || ''} disabled />
-              <Input label="Họ và tên" value={user ? `${user.last_name} ${user.first_name}` : '---'} disabled />
-              <Input label="Email" value={user?.email || ''} disabled />
-              <Input label="Lớp" value={p.class_name || ''} disabled />
-              <Input label="Khoa" value={user?.faculty?.name || ''} disabled />
-              <Input label="Loại đăng ký" value={thesisLabel} disabled />
+            {/* Thông tin sinh viên */}
+            <div className="px-6 py-5">
+              <SectionLabel icon="fa-regular fa-user" text="Thông tin sinh viên" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+                <FieldRow label="Mã số sinh viên" value={p.student_id} />
+                <FieldRow label="Họ và tên" value={user ? `${user.last_name} ${user.first_name}` : '---'} />
+                <FieldRow label="Email" value={user?.email} />
+                <FieldRow label="Lớp" value={p.class_name} />
+                <FieldRow label="Khoa" value={user?.faculty?.name} />
+              </div>
             </div>
-          </SectionCard>
 
-          <SectionCard title="Thông tin đề tài" icon="fa-regular fa-file-lines">
-            <Input label="Tên đề tài" value={existingRegistration.project_title || ''} disabled />
-            <Card variant="soft" bodyClassName="!p-0">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5 px-1">Mô tả</p>
-              <p className="text-sm text-gray-700 leading-relaxed">
+            {/* Thông tin đề tài */}
+            <div className="px-6 py-5">
+              <SectionLabel icon="fa-regular fa-lightbulb" text="Thông tin đề tài" />
+              <p className="text-sm font-medium text-gray-800 mb-2">
+                {existingRegistration.project_title || '—'}
+              </p>
+              <p className="text-sm text-gray-600 leading-relaxed">
                 {existingRegistration.project_description || '—'}
               </p>
-            </Card>
-          </SectionCard>
+            </div>
 
-          {existingRegistration.lecturer_assignments?.length > 0 && (
-            <SectionCard title="Giảng viên hướng dẫn" icon="fa-solid fa-chalkboard-user">
-              <div className="space-y-4">
-                {existingRegistration.lecturer_assignments.map((a: any) => {
-                  const appCfg = APPROVAL_CONFIG[a.approval_status] || {};
-                  const roleLabel = a.role === 'main' ? 'Chính thức' : a.role === 'backup' ? 'Dự phòng' : a.role;
-                  return (
-                    <Card key={a.id} variant="outline" bodyClassName="!p-0 flex items-start justify-between w-full">
-                      <div>
-                        <p className="font-medium text-gray-800 text-sm">{a.lecturer_name}</p>
-                        <Badge variant={a.role === 'main' ? 'primary' : 'neutral'} className="mt-1">
-                          {roleLabel}
-                        </Badge>
+            {/* Giảng viên hướng dẫn */}
+            {existingRegistration.lecturer_assignments?.length > 0 && (
+              <div className="px-6 py-5">
+                <SectionLabel icon="fa-solid fa-chalkboard-user" text="Giảng viên hướng dẫn" />
+                <div className="divide-y divide-gray-50">
+                  {existingRegistration.lecturer_assignments.map((a: any) => {
+                    const appCfg = APPROVAL_CONFIG[a.approval_status] || ({} as { label: string; variant: string });
+                    const roleLabel =
+                      a.role === 'main' ? 'Chính thức'
+                        : a.role === 'option1' ? 'Nguyện vọng 1'
+                          : a.role === 'option2' ? 'Nguyện vọng 2'
+                            : a.role;
+                    const roleVariant =
+                      a.role === 'main' ? 'primary'
+                        : a.role === 'option1' || a.role === 'option2' ? 'warning'
+                          : 'neutral';
+                    return (
+                      <div key={a.id} className="flex items-start justify-between py-3 first:pt-0 last:pb-0">
+                        <div>
+                          <p className="font-medium text-gray-800 text-sm">{a.lecturer_name}</p>
+                          <Badge variant={roleVariant} className="mt-1">{roleLabel}</Badge>
+                        </div>
+                        <div className="text-right">
+                          <Badge variant={appCfg.variant as any}>{appCfg.label}</Badge>
+                          {a.note && (
+                            <p className="text-xs text-gray-400 mt-1 max-w-[200px] truncate">{a.note}</p>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <Badge variant={appCfg.variant as any}>{appCfg.label}</Badge>
-                        {a.note && <p className="text-xs text-gray-400 mt-1 max-w-[200px] truncate">{a.note}</p>}
-                      </div>
-                    </Card>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </SectionCard>
-          )}
+            )}
 
-          <Card variant="soft" icon="fa-solid fa-circle-info" title="Trạng thái đăng ký" className="!p-4 bg-blue-50/60 border-blue-100" bodyClassName="!p-0">
-            <p className="text-xs text-blue-700">
-              {existingRegistration.status === 'waiting_lecturer'
-                ? 'Đơn đăng ký của bạn đang chờ được phân giảng viên hướng dẫn.'
-                : 'Đơn đăng ký của bạn đã được phân giảng viên hướng dẫn và đang chờ duyệt.'}
-            </p>
+            {/* Trạng thái đăng ký — dùng lại Card variant="soft" đúng như hệ thống sẵn có */}
+            <Card
+              variant="soft"
+              icon="fa-solid fa-circle-info"
+              className="!rounded-none !border-0 !bg-blue-50/60"
+              bodyClassName="!p-0"
+            >
+              <p className="text-xs text-blue-700 leading-relaxed">
+                {existingRegistration.status === 'waiting_lecturer'
+                  ? 'Đơn đăng ký của bạn đang chờ được phân giảng viên hướng dẫn.'
+                  : 'Đơn đăng ký của bạn đã được phân giảng viên hướng dẫn và đang chờ duyệt.'}
+              </p>
+            </Card>
           </Card>
         </div>
 
-        <footer className="mt-8 border-t border-gray-200 pt-4 flex justify-between items-center text-xs text-gray-500 pb-2 px-6">
+        <footer className="mt-8 border-t border-gray-200 pt-4 flex justify-between items-center text-xs text-gray-500 pb-2 px-6 max-w-3xl mx-auto">
           <p>© 2025 Thesis Portal - Hệ thống Quản lý Luận văn Tốt nghiệp</p>
-          <p>Phiên bản 2.1.0 · Hỗ trợ: <a className="text-primary hover:underline" href="mailto:support@thesisportal.edu.vn">support@thesisportal.edu.vn</a></p>
+          <p>
+            Phiên bản 2.1.0 · Hỗ trợ:{' '}
+            <a className="text-primary hover:underline" href="mailto:support@thesisportal.edu.vn">
+              support@thesisportal.edu.vn
+            </a>
+          </p>
         </footer>
       </main>
+    );
+  }
+
+  // Nhãn section nhỏ, đồng bộ style với icon-box của Card
+  function SectionLabel({ icon, text }: { icon: string; text: string }) {
+    return (
+      <div className="flex items-center gap-2 mb-3">
+        <i className={`${icon} text-primary text-xs`} />
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">{text}</p>
+      </div>
+    );
+  }
+
+  function FieldRow({ label, value }: { label: string; value?: string | null }) {
+    return (
+      <div>
+        <p className="text-[11px] text-gray-400 mb-0.5">{label}</p>
+        <p className="text-sm text-gray-800">{value || '—'}</p>
+      </div>
     );
   }
 
   return (
     <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
       <div className="max-w-4xl mx-auto w-full">
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">Thông tin Đăng ký Đồ án tốt nghiệp</h2>
-          <p className="text-gray-600">Vui lòng điền đầy đủ và chính xác thông tin để đăng ký đề tài tốt nghiệp.</p>
-        </div>
-
         {submitResult && (
           <div className={`mb-4 px-4 py-3 rounded-xl text-sm font-medium ${submitResult.type === 'success'
-              ? 'bg-green-50 border border-green-200 text-green-700'
-              : 'bg-red-50 border border-red-200 text-red-700'
+            ? 'bg-green-50 border border-green-200 text-green-700'
+            : 'bg-red-50 border border-red-200 text-red-700'
             }`}>
             {submitResult.message}
           </div>

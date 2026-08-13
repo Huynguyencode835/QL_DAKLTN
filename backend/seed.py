@@ -10,11 +10,27 @@ from django.db import transaction
 from django.utils import timezone
 
 from theses.models import (
-    User, Faculty, Major, Specialization,
+    User, Faculty, Major, Specialization, AcademicDegree,
     StudentProfile, LecturerProfile, StaffProfile,
     ListOfTopics, RegistrationPeriod, ProjectRegistration,
     RegistrationLecturer,
 )
+
+# Map nhãn học vị trong lecturers_data -> tên (name) của AcademicDegree
+DEGREE_LABEL_TO_NAME = {
+    'Tiến sĩ': AcademicDegree.DegreeName.DOCTOR,
+    'Thạc sĩ': AcademicDegree.DegreeName.MASTER,
+    'Phó giáo sư - Tiến sĩ': AcademicDegree.DegreeName.ASSOC_PROF,
+    'Phó giáo sư': AcademicDegree.DegreeName.ASSOC_PROF,
+    'Giáo sư': AcademicDegree.DegreeName.PROF,
+}
+
+DEGREE_DATA = [
+    {'name': AcademicDegree.DegreeName.MASTER, 'max_students_quota': 14},
+    {'name': AcademicDegree.DegreeName.DOCTOR, 'max_students_quota': 16},
+    {'name': AcademicDegree.DegreeName.ASSOC_PROF, 'max_students_quota': 18},
+    {'name': AcademicDegree.DegreeName.PROF, 'max_students_quota': 20},
+]
 
 
 # ============================================================
@@ -545,10 +561,14 @@ def create_lecturer(data, faculties, specializations):
     if created:
         user.set_password(data['password'])
         user.save()
+        degree_label = data['profile']['academic_degree']
+        degree = AcademicDegree.objects.get(
+            name=DEGREE_LABEL_TO_NAME[degree_label],
+        )
         profile, _ = LecturerProfile.objects.get_or_create(
             user=user,
             defaults={
-                'academic_degree': data['profile']['academic_degree'],
+                'academic_degree': degree,
                 'position': data['profile']['position'],
             },
         )
@@ -591,9 +611,47 @@ def create_staff(data, faculties):
     return user, created
 
 
+def reset_data():
+    """Xoá toàn bộ dữ liệu cũ của app theses để seed tạo lại từ đầu.
+
+    Giữ lại superuser (admin) để không phá quyền quản trị đã tạo.
+    Thứ tự xoá tuân theo khoá ngoại (con trước, cha sau).
+    """
+    from theses.models import (
+        Committee, CommitteeMember, Faculty, Grade, LecturerProfile,
+        ListOfTopics, Major, ProjectRegistration, RegistrationLecturer,
+        RegistrationPeriod, Report, Specialization, StaffProfile,
+        StudentProfile, User,
+    )
+
+    Report.objects.all().delete()
+    Grade.objects.all().delete()
+    RegistrationLecturer.objects.all().delete()
+    CommitteeMember.objects.all().delete()
+    Committee.objects.all().delete()
+    ProjectRegistration.objects.all().delete()
+    RegistrationPeriod.objects.all().delete()
+    ListOfTopics.objects.all().delete()
+    StudentProfile.objects.all().delete()
+    LecturerProfile.objects.all().delete()
+    StaffProfile.objects.all().delete()
+    # Giữ superuser, xoá các user còn lại (student/lecturer/staff thường)
+    User.objects.filter(is_superuser=False).delete()
+    User.objects.filter(is_superuser=True).update(faculty=None)
+    Specialization.objects.all().delete()
+    Major.objects.all().delete()
+    Faculty.objects.all().delete()
+
+
 @transaction.atomic
 def run():
     now = timezone.now()
+
+    # --------------------------------------------------------
+    # XOÁ DỮ LIỆU CŨ -> luôn tạo lại bộ dữ liệu mới
+    # --------------------------------------------------------
+    print('=== Xoá dữ liệu cũ của app theses (giữ superuser) ===')
+    reset_data()
 
     # --------------------------------------------------------
     # Khoa, Ngành, Chuyên ngành
@@ -625,6 +683,16 @@ def run():
             defaults={'faculty': faculties[sd['faculty_idx']]},
         )
         specializations.append(s)
+
+    # --------------------------------------------------------
+    # Học vị (AcademicDegree) — bắt buộc cho LecturerProfile.
+    # Không xoá ở reset_data (dữ liệu cố định), dùng ignore_conflicts
+    # để chạy lại nhiều lần không lỗi unique.
+    # --------------------------------------------------------
+    AcademicDegree.objects.bulk_create(
+        [AcademicDegree(**d) for d in DEGREE_DATA],
+        ignore_conflicts=True,
+    )
 
     # ========================================================
     # ===============  TẠO 3 TÀI KHOẢN HERO  ================
@@ -712,7 +780,7 @@ def run():
     period_data = [
         {
             'key': 'archived_1', 'name': 'Đợt 1 - Học kỳ 1 (2022-2023)',
-            'academic_year': '2022-2023', 'status': RegistrationPeriod.STATUS.ARCHIVED,
+            'academic_year': '2022-2023', 'status': RegistrationPeriod.STATUS.CLOSED,
             'faculty_idx': 0, 'created_by': staff1,
             'student_registration_start': dt(-104), 'student_registration_end': dt(-98),
             'report_submission_start': dt(-97), 'report_submission_end': dt(-90),
@@ -720,7 +788,7 @@ def run():
         },
         {
             'key': 'archived_2', 'name': 'Đợt 2 - Học kỳ 2 (2022-2023)',
-            'academic_year': '2022-2023', 'status': RegistrationPeriod.STATUS.ARCHIVED,
+            'academic_year': '2022-2023', 'status': RegistrationPeriod.STATUS.CLOSED,
             'faculty_idx': 0, 'created_by': staff1,
             'student_registration_start': dt(-90), 'student_registration_end': dt(-84),
             'report_submission_start': dt(-83), 'report_submission_end': dt(-76),
@@ -753,12 +821,13 @@ def run():
             'execution_duration_weeks': 10,
         },
         {
-            # Đợt duy nhất đang "mở" của khoa CNTT tại thời điểm chạy seed
+            # Đợt duy nhất đang "mở" của khoa CNTT tại thời điểm chạy seed.
+            # Cửa sổ đăng ký phải bao quanh thời điểm hiện tại để SV/GV dùng được.
             'key': 'open_1', 'name': 'Đợt 6 - Học kỳ 2 (2024-2025)',
             'academic_year': '2024-2025', 'status': RegistrationPeriod.STATUS.STUDENT_REGISTRATION,
             'faculty_idx': 0, 'created_by': staff1,
-            'student_registration_start': dt(-1), 'student_registration_end': dt(3),
-            'report_submission_start': dt(13), 'report_submission_end': dt(20),
+            'student_registration_start': dt(-7), 'student_registration_end': dt(7),
+            'report_submission_start': dt(17), 'report_submission_end': dt(24),
             'execution_duration_weeks': 10,
         },
         {
@@ -777,14 +846,24 @@ def run():
             'key': 'ktqtkd_open', 'name': 'Đợt KTQTKD - Học kỳ 1 (2024-2025)',
             'academic_year': '2024-2025', 'status': RegistrationPeriod.STATUS.STUDENT_REGISTRATION,
             'faculty_idx': 1, 'created_by': staff3,
-            'student_registration_start': dt(-1), 'student_registration_end': dt(5),
-            'report_submission_start': dt(15), 'report_submission_end': dt(22),
+            'student_registration_start': dt(-7), 'student_registration_end': dt(7),
+            'report_submission_start': dt(17), 'report_submission_end': dt(24),
             'execution_duration_weeks': 10,
         },
     ]
 
     periods_by_key = {}
     for pd in period_data:
+        # student_registration_end / report_submission_start / report_submission_end
+        # là các @property tính từ start + các số ngày/tuần, KHÔNG phải field trong DB.
+        # Tính ngược ra các field thật để giữ đúng các mốc thời gian đã khai báo.
+        student_registration_days = (
+            pd['student_registration_end'] - pd['student_registration_start']
+        ).days
+        report_submission_days = (
+            pd['report_submission_end'] - pd['report_submission_start']
+        ).days
+
         period, created = RegistrationPeriod.objects.get_or_create(
             name=pd['name'],
             defaults={
@@ -793,10 +872,9 @@ def run():
                 'faculty': faculties[pd['faculty_idx']],
                 'created_by': pd['created_by'],
                 'student_registration_start': pd['student_registration_start'],
-                'student_registration_end': pd['student_registration_end'],
-                'report_submission_start': pd['report_submission_start'],
-                'report_submission_end': pd['report_submission_end'],
+                'student_registration_days': student_registration_days,
                 'execution_duration_weeks': pd['execution_duration_weeks'],
+                'report_submission_days': report_submission_days,
             },
         )
         periods_by_key[pd['key']] = period
@@ -823,127 +901,127 @@ def run():
             'student': 'student1', 'lecturer': 'lecturer1', 'period': 'closed_1',
             'project_title': 'Xây dựng hệ thống quản lý khóa luận tốt nghiệp',
             'project_description': 'Xây dựng hệ thống web quản lý toàn bộ quy trình đăng ký và thực hiện khóa luận tốt nghiệp.',
-            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'is_Thesis': True,
+            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'wants_thesis_upgrade': True,
         },
         {
             'student': 'student4', 'lecturer': 'lecturer1', 'period': 'open_1',
             'project_title': 'Ứng dụng đặt xe nội bộ cho doanh nghiệp',
             'project_description': 'Em muốn xây dựng ứng dụng đặt xe đưa đón nhân viên nội bộ cho doanh nghiệp vừa và nhỏ.',
-            'approval_status': RegistrationLecturer.ApprovalStatus.PENDING, 'is_Thesis': True,
+            'approval_status': RegistrationLecturer.ApprovalStatus.PENDING, 'wants_thesis_upgrade': False,
         },
         {
             'student': 'student6', 'lecturer': 'lecturer1', 'period': 'closed_1',
             'project_title': 'Hệ thống giám sát hiệu năng vi dịch vụ',
             'project_description': 'Xây dựng dashboard giám sát hiệu năng cho kiến trúc microservices.',
             'approval_status': RegistrationLecturer.ApprovalStatus.REJECTED,
-            'note': 'Đề tài trùng với đề tài đã có sinh viên khác thực hiện.', 'is_Thesis': True,
+            'note': 'Đề tài trùng với đề tài đã có sinh viên khác thực hiện.', 'wants_thesis_upgrade': True,
         },
         {
             'student': 'student7', 'lecturer': 'lecturer1', 'period': 'report_submission_1',
             'project_title': 'Nền tảng thi trực tuyến chống gian lận',
             'project_description': 'Xây dựng hệ thống thi trực tuyến tích hợp giám sát webcam phát hiện gian lận.',
-            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'is_Thesis': True,
+            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'wants_thesis_upgrade': True,
         },
         {
             'student': 'student8', 'lecturer': 'lecturer1', 'period': 'report_submission_1',
             'project_title': 'Ứng dụng quản lý ký túc xá sinh viên',
             'project_description': 'Xây dựng hệ thống quản lý phòng, đăng ký ở và thanh toán phí ký túc xá.',
-            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'is_Thesis': True,
+            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'wants_thesis_upgrade': False,
         },
         {
             'student': 'student10', 'lecturer': 'lecturer1', 'period': 'open_1',
             'project_title': 'Hệ thống chấm điểm tự động bài tập lập trình',
             'project_description': 'Xây dựng hệ thống chấm tự động bài tập lập trình sử dụng sandbox thực thi mã.',
-            'approval_status': RegistrationLecturer.ApprovalStatus.PENDING, 'is_Thesis': True,
+            'approval_status': RegistrationLecturer.ApprovalStatus.PENDING, 'wants_thesis_upgrade': False,
         },
         {
             'student': 'student11', 'lecturer': 'lecturer1', 'period': 'closed_1',
             'project_title': 'Ứng dụng quản lý chuỗi cung ứng sử dụng blockchain',
             'project_description': 'Ứng dụng blockchain để truy xuất nguồn gốc hàng hóa trong chuỗi cung ứng.',
             'approval_status': RegistrationLecturer.ApprovalStatus.REJECTED,
-            'note': 'Phạm vi đề tài quá rộng so với thời gian thực hiện.', 'is_Thesis': True,
+            'note': 'Phạm vi đề tài quá rộng so với thời gian thực hiện.', 'wants_thesis_upgrade': True,
         },
         {
             'student': 'student12', 'lecturer': 'lecturer1', 'period': 'in_progress_1',
             'project_title': 'Hệ thống quản lý thư viện số',
             'project_description': 'Xây dựng hệ thống quản lý và tra cứu tài liệu số cho thư viện trường.',
-            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'is_Thesis': True,
+            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'wants_thesis_upgrade': True,
         },
         {
             'student': 'student13', 'lecturer': 'lecturer1', 'period': 'open_1',
             'project_title': 'Ứng dụng học ngoại ngữ tương tác',
             'project_description': 'Em muốn xây dựng ứng dụng học ngoại ngữ có phần luyện phát âm bằng AI.',
-            'approval_status': RegistrationLecturer.ApprovalStatus.PENDING, 'is_Thesis': True,
+            'approval_status': RegistrationLecturer.ApprovalStatus.PENDING, 'wants_thesis_upgrade': False,
         },
         {
             'student': 'student14', 'lecturer': 'lecturer1', 'period': 'report_submission_1',
             'project_title': 'Hệ thống quản lý bảo hành thiết bị điện tử',
             'project_description': 'Xây dựng hệ thống theo dõi bảo hành và sửa chữa thiết bị điện tử cho cửa hàng.',
-            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'is_Thesis': True,
+            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'wants_thesis_upgrade': False,
         },
         # ---- Sinh viên chưa được phân/chờ giảng viên (open_1) ----
         {
             'student': 'student2', 'lecturer': None, 'period': 'open_1',
             'project_title': 'Ứng dụng blockchain trong lưu trữ văn bằng',
             'project_description': 'Nghiên cứu ứng dụng công nghệ blockchain để lưu trữ và xác thực văn bằng tốt nghiệp.',
-            'is_Thesis': True,
+            'wants_thesis_upgrade': True,
         },
         {
             'student': 'student9', 'lecturer': None, 'period': 'open_1',
             'project_title': 'Thực tập tại công ty phần mềm',
             'project_description': 'Em đăng ký thực tập tốt nghiệp tại doanh nghiệp thay vì làm đồ án.',
-            'is_Thesis': False,
+            'wants_thesis_upgrade': False,
         },
         {
             'student': 'student16', 'lecturer': None, 'period': 'open_1',
             'project_title': 'Thực tập tốt nghiệp tại doanh nghiệp phần mềm',
             'project_description': 'Em đăng ký hình thức thực tập tốt nghiệp thay vì làm khóa luận.',
-            'is_Thesis': False,
+            'wants_thesis_upgrade': False,
         },
         # ---- Các giảng viên khác, để test staff1 thấy đa dạng dữ liệu ----
         {
             'student': 'student3', 'lecturer': 'lecturer3', 'period': 'closed_1',
             'project_title': 'Chatbot hỗ trợ tư vấn tuyển sinh',
             'project_description': 'Phát triển chatbot sử dụng NLP để tư vấn tuyển sinh cho thí sinh.',
-            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'is_Thesis': True,
+            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'wants_thesis_upgrade': True,
         },
         {
             'student': 'student15', 'lecturer': 'lecturer2', 'period': 'closed_1',
             'project_title': 'Hệ thống gợi ý sản phẩm thương mại điện tử',
             'project_description': 'Xây dựng hệ thống gợi ý sản phẩm sử dụng collaborative filtering.',
-            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'is_Thesis': True,
+            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'wants_thesis_upgrade': False,
         },
         {
             'student': 'student17', 'lecturer': 'lecturer6', 'period': 'open_1',
             'project_title': 'Hệ thống khuyến nghị việc làm thông minh',
             'project_description': 'Xây dựng hệ thống gợi ý việc làm dựa trên kỹ năng và sở thích người dùng.',
-            'approval_status': RegistrationLecturer.ApprovalStatus.PENDING, 'is_Thesis': True,
+            'approval_status': RegistrationLecturer.ApprovalStatus.PENDING, 'wants_thesis_upgrade': True,
         },
         # ---- Khoa KTQTKD ----
         {
             'student': 'student5', 'lecturer': 'lecturer5', 'period': 'ktqtkd_open',
             'project_title': 'Phân tích hành vi khách hàng trong thương mại điện tử',
             'project_description': 'Sử dụng dữ liệu lớn để phân tích và dự đoán hành vi mua sắm khách hàng trực tuyến.',
-            'approval_status': RegistrationLecturer.ApprovalStatus.PENDING, 'is_Thesis': True,
+            'approval_status': RegistrationLecturer.ApprovalStatus.PENDING, 'wants_thesis_upgrade': False,
         },
         {
             'student': 'student18', 'lecturer': 'lecturer5', 'period': 'ktqtkd_open',
             'project_title': 'Hệ thống dự báo doanh số bán lẻ',
             'project_description': 'Xây dựng mô hình dự báo doanh số cho chuỗi cửa hàng bán lẻ.',
-            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'is_Thesis': True,
+            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'wants_thesis_upgrade': False,
         },
         {
             'student': 'student19', 'lecturer': None, 'period': 'ktqtkd_open',
             'project_title': 'Chiến lược marketing số cho doanh nghiệp nhỏ',
             'project_description': 'Nghiên cứu và đề xuất chiến lược marketing số cho doanh nghiệp vừa và nhỏ.',
-            'is_Thesis': True,
+            'wants_thesis_upgrade': False,
         },
         {
             'student': 'student20', 'lecturer': 'lecturer5', 'period': 'ktqtkd_open',
             'project_title': 'Thực tập tốt nghiệp tại doanh nghiệp bán lẻ',
             'project_description': 'Em đăng ký hình thức thực tập tốt nghiệp tại doanh nghiệp bán lẻ.',
             'approval_status': RegistrationLecturer.ApprovalStatus.REJECTED,
-            'note': 'Doanh nghiệp thực tập chưa có hợp đồng hợp tác với trường.', 'is_Thesis': False,
+            'note': 'Doanh nghiệp thực tập chưa có hợp đồng hợp tác với trường.', 'wants_thesis_upgrade': False,
         },
     ]
 
@@ -954,10 +1032,13 @@ def run():
         if not student:
             continue
 
-        # Trạng thái tổng của registration chỉ phản ánh đã phân GVHD hay chưa
+        # Trạng thái tổng của registration: ASSIGNED chỉ khi đã có GVHD chính
+        # thức (MAIN, đã duyệt); nếu chỉ có nguyện vọng (OPTION) đang chờ/từ chối
+        # thì vẫn WAITING cho tới khi có người được chọn làm MAIN.
+        approved = rd.get('approval_status') == RegistrationLecturer.ApprovalStatus.APPROVED
         reg_status = (
             ProjectRegistration.STATUS.ASSIGNED_LECTURER_AND_PENDING
-            if lecturer else
+            if (lecturer and approved) else
             ProjectRegistration.STATUS.WAITING_LECTURER_AND_PENDING
         )
 
@@ -968,7 +1049,7 @@ def run():
                 'project_title': rd['project_title'],
                 'project_description': rd['project_description'],
                 'status': reg_status,
-                'is_Thesis': rd['is_Thesis'],
+                'wants_thesis_upgrade': rd.get('wants_thesis_upgrade', False),
             },
         )
 
@@ -979,7 +1060,9 @@ def run():
                 f"-> {lecturer.username if lecturer else 'TBD'} [{reg_status}]"
             )
 
-            # Nếu đã có giảng viên hướng dẫn -> tạo dòng RegistrationLecturer (role=MAIN)
+            # Nếu đã có giảng viên -> tạo dòng RegistrationLecturer.
+            #   - Đã đồng ý (APPROVED) -> role=MAIN (GVHD chính thức)
+            #   - Đang chờ / từ chối -> role=OPTION1 (nguyện vọng)
             if lecturer:
                 approval_status = rd.get('approval_status', RegistrationLecturer.ApprovalStatus.PENDING)
                 responded_at = (
@@ -990,11 +1073,16 @@ def run():
                     )
                     else None
                 )
+                assignment_role = (
+                    RegistrationLecturer.Role.MAIN
+                    if approval_status == RegistrationLecturer.ApprovalStatus.APPROVED
+                    else RegistrationLecturer.Role.OPTION1
+                )
                 RegistrationLecturer.objects.get_or_create(
                     registration=registration,
-                    role=RegistrationLecturer.Role.MAIN,
+                    lecturer=lecturer,
                     defaults={
-                        'lecturer': lecturer,
+                        'role': assignment_role,
                         'approval_status': approval_status,
                         'responded_at': responded_at,
                         'note': rd.get('note'),

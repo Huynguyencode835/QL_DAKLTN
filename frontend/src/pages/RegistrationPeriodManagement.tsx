@@ -1,8 +1,8 @@
-import { useEffect, useState, type ChangeEvent } from 'react';
-import { useModal } from '../hooks';
+import { useEffect, useState } from 'react';
+import { useModal, usePageHeader } from '../hooks';
 import { fetchWithAuth, createWithAuth, deleteWithAuth } from '../utils/ApiHelper';
 import { endpoints } from '../config/Apis';
-import Card from '../components/Ui/Card';
+import Card, { SectionCard } from '../components/Ui/Card';
 import Button from '../components/Ui/Button';
 import Badge from '../components/Ui/Badge';
 import Input from '../components/Ui/Input';
@@ -10,7 +10,7 @@ import Select from '../components/Ui/Select';
 import type { RegistrationPeriod } from '../types';
 
 const STATUS_CONFIG: Record<string, { label: string; variant: 'neutral' | 'primary' | 'success' | 'warning' | 'danger' | 'info' }> = {
-  draft: { label: 'Nháp', variant: 'neutral' },
+  scheduled: { label: 'Chờ mở đăng ký', variant: 'neutral' },
   student_registration: { label: 'Đang mở đăng ký', variant: 'primary' },
   in_progress: { label: 'Đang thực hiện đồ án', variant: 'info' },
   report_submission: { label: 'Đang nhận báo cáo', variant: 'warning' },
@@ -23,6 +23,15 @@ const FORMAT_STATUS_OPTIONS = Object.entries(STATUS_CONFIG).map(([value, config]
   label: config.label,
 }));
 
+const CARD_STYLE: Record<string, string> = {
+  scheduled: 'border-gray-200 hover:border-gray-300',
+  student_registration: 'border-blue-400/70 hover:border-blue-500',
+  in_progress: 'border-violet-400/70 hover:border-violet-500',
+  report_submission: 'border-amber-400/70 hover:border-amber-500',
+  closed: 'border-green-500/70 hover:border-green-600',
+  archived: 'border-gray-200 hover:border-gray-300',
+};
+
 const emptyForm = {
   name: '',
   academic_year: '',
@@ -31,7 +40,7 @@ const emptyForm = {
   report_submission_start: '',
   report_submission_end: '',
   execution_duration_weeks: '10',
-  status: 'draft',
+  status: 'scheduled',
 };
 
 function formatDate(iso: string | undefined | null): string {
@@ -53,6 +62,20 @@ function toDatetimeLocal(iso: string | undefined | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function PeriodInfo({ icon, label, value }: { icon: string; label: string; value: any }) {
+  return (
+    <Card variant="soft" className="!p-3" bodyClassName="!p-0 flex items-center gap-3">
+      <span className="w-10 h-10 shrink-0 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+        <i className={`${icon} text-sm`}></i>
+      </span>
+      <div className="min-w-0">
+        <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">{label}</p>
+        <div className="text-sm font-semibold text-gray-800 truncate">{value || '—'}</div>
+      </div>
+    </Card>
+  );
+}
+
 export default function RegistrationPeriodManagement() {
   const { openModal, closeModal } = useModal();
   const [periods, setPeriods] = useState<RegistrationPeriod[]>([]);
@@ -61,10 +84,16 @@ export default function RegistrationPeriodManagement() {
   const [submitting, setSubmitting] = useState(false);
   const [formModalOpen, setFormModalOpen] = useState(false);
 
+  usePageHeader({
+    title: 'Quản lý đợt đăng ký',
+    description: 'Tạo và quản lý các đợt đăng ký đồ án / khóa luận tốt nghiệp.',
+  });
+
+
   useEffect(() => { loadPeriods(); }, []);
 
   const loadPeriods = async () => {
-    await fetchWithAuth(endpoints.registrationPeriods, setPeriods, () => {}, {}, setLoading);
+    await fetchWithAuth(endpoints.registrationPeriods, setPeriods, () => { }, {}, setLoading);
   };
 
   const update = (field: string) => (e: any) => {
@@ -82,21 +111,21 @@ export default function RegistrationPeriodManagement() {
     e.preventDefault();
     setSubmitting(true);
 
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const daysBetween = (from: string, to: string) => {
+      if (!from || !to) return undefined;
+      const diff = Math.ceil((new Date(to).getTime() - new Date(from).getTime()) / msPerDay);
+      return diff > 0 ? diff : undefined;
+    };
+
     const body: Record<string, any> = {
       name: form.name,
       academic_year: form.academic_year,
       student_registration_start: form.student_registration_start
         ? new Date(form.student_registration_start).toISOString()
         : null,
-      student_registration_end: form.student_registration_end
-        ? new Date(form.student_registration_end).toISOString()
-        : null,
-      report_submission_start: form.report_submission_start
-        ? new Date(form.report_submission_start).toISOString()
-        : null,
-      report_submission_end: form.report_submission_end
-        ? new Date(form.report_submission_end).toISOString()
-        : null,
+      student_registration_days: daysBetween(form.student_registration_start, form.student_registration_end),
+      report_submission_days: daysBetween(form.report_submission_start, form.report_submission_end),
       execution_duration_weeks: parseInt(form.execution_duration_weeks, 10),
       status: form.status,
     };
@@ -109,7 +138,7 @@ export default function RegistrationPeriodManagement() {
         setFormModalOpen(false);
         resetForm();
       },
-      () => {},
+      () => { },
       setSubmitting,
     );
   };
@@ -126,7 +155,7 @@ export default function RegistrationPeriodManagement() {
             deleteWithAuth(
               `${endpoints.registrationPeriods}${id}/`,
               () => { loadPeriods(); closeModal(); },
-              () => {},
+              () => { },
             );
           }}>
             Xóa
@@ -137,14 +166,63 @@ export default function RegistrationPeriodManagement() {
     });
   };
 
+  const loadDetailPeriod = async (id: number) => {
+    await fetchWithAuth(
+      endpoints.registrationPeriodDetail(id),
+      (data) => {
+        const status = STATUS_CONFIG[data.status] || STATUS_CONFIG.scheduled;
+        openModal({
+          title: data.name || 'Xem chi tiết',
+          description: `Trạng thái: ${status.label}`,
+          icon: 'fa-regular fa-file-lines',
+          size: 'lg',
+          content: (
+            <div className="space-y-5">
+              <Card
+                variant="soft"
+                className="!bg-primary/5 !border-primary/10 !p-4"
+                bodyClassName="!p-0 flex items-center justify-between gap-4"
+              >
+                <div className="min-w-0">
+                  <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Tên đợt</p>
+                  <p className="text-sm font-semibold text-gray-800 truncate">{data.name || '—'}</p>
+                </div>
+                <Badge variant={status.variant} dot>{status.label}</Badge>
+              </Card>
+
+              <SectionCard title="Thông tin chung" icon="fa-solid fa-circle-info">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <PeriodInfo icon="fa-solid fa-hashtag" label="ID" value={data.id} />
+                  <PeriodInfo icon="fa-solid fa-calendar-days" label="Năm học" value={data.academic_year} />
+                  <PeriodInfo icon="fa-solid fa-user" label="Người tạo" value={data.created_by} />
+                  <PeriodInfo icon="fa-solid fa-toggle-on" label="Đang hoạt động" value={data.active ? 'Có' : 'Không'} />
+                  <PeriodInfo icon="fa-regular fa-clock" label="Ngày tạo" value={formatDate(data.created_date)} />
+                  <PeriodInfo icon="fa-regular fa-clock" label="Cập nhật gần nhất" value={formatDate(data.updated_date)} />
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Thời gian & tiến độ" icon="fa-solid fa-chart-line">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <PeriodInfo icon="fa-regular fa-calendar" label="Bắt đầu đăng ký" value={formatDate(data.student_registration_start)} />
+                  <PeriodInfo icon="fa-solid fa-calendar-check" label="Số ngày đăng ký" value={data.student_registration_days} />
+                  <PeriodInfo icon="fa-solid fa-file-arrow-up" label="Số ngày nộp báo cáo" value={data.report_submission_days} />
+                  <PeriodInfo icon="fa-solid fa-stopwatch" label="Số tuần thực hiện" value={data.execution_duration_weeks} />
+                </div>
+              </SectionCard>
+            </div>
+          ),
+          footer: (
+            <Button variant="outline" size="sm" onClick={closeModal}>Đóng</Button>
+          ),
+        });
+      }
+    );
+  }
+
   return (
     <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
       <div className="max-w-7xl mx-auto w-full space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">Quản lý đợt đăng ký</h2>
-            <p className="text-gray-600">Tạo và quản lý các đợt đăng ký đồ án / khóa luận tốt nghiệp.</p>
-          </div>
+        <div className="flex items-center justify-end">
           <Button variant="primary" icon="fa-solid fa-plus" onClick={openCreateModal}>
             Tạo đợt mới
           </Button>
@@ -161,57 +239,37 @@ export default function RegistrationPeriodManagement() {
               <p className="text-sm font-medium">Chưa có đợt đăng ký nào</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 text-left">
-                    <th className="pb-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Tên đợt</th>
-                    <th className="pb-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Năm học</th>
-                    <th className="pb-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Đăng ký</th>
-                    <th className="pb-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Nộp báo cáo</th>
-                    <th className="pb-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Số tuần</th>
-                    <th className="pb-3 font-semibold text-gray-600 text-xs uppercase tracking-wider">Trạng thái</th>
-                    <th className="pb-3 font-semibold text-gray-600 text-xs uppercase tracking-wider text-right">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {periods.map((p: any) => {
-                    const status = STATUS_CONFIG[p.status] || STATUS_CONFIG.draft;
-                    return (
-                      <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="py-3.5 pr-4 font-medium text-gray-800">{p.name}</td>
-                        <td className="py-3.5 pr-4 text-gray-600">{p.academic_year}</td>
-                        <td className="py-3.5 pr-4">
-                          <div className="text-xs text-gray-600">
-                            <div>Từ: {formatDate(p.student_registration_start)}</div>
-                            <div>Đến: {formatDate(p.student_registration_end)}</div>
-                          </div>
-                        </td>
-                        <td className="py-3.5 pr-4">
-                          <div className="text-xs text-gray-600">
-                            <div>Từ: {formatDate(p.report_submission_start)}</div>
-                            <div>Đến: {formatDate(p.report_submission_end)}</div>
-                          </div>
-                        </td>
-                        <td className="py-3.5 pr-4 text-gray-600">{p.execution_duration_weeks} tuần</td>
-                        <td className="py-3.5 pr-4">
-                          <Badge variant={status.variant} dot>{status.label}</Badge>
-                        </td>
-                        <td className="py-3.5 text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            icon="fa-solid fa-trash-can"
-                            className="text-gray-400 hover:text-red-500"
-                            onClick={() => handleDelete(p.id)}
-                          >
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {periods.map((p: any) => {
+                const status = STATUS_CONFIG[p.status] || STATUS_CONFIG.scheduled;
+                return (
+                  <div
+                    key={p.id}
+                    className={`relative rounded-xl bg-white p-4 shadow-sm hover:shadow-md transition-all border-2 ${CARD_STYLE[p.status] || CARD_STYLE.scheduled}`}
+                    onClick={() => loadDetailPeriod(p.id)}
+                  >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(p.id);
+                      }}
+                      className="absolute top-3 right-3 text-gray-300 hover:text-red-500 transition-colors"
+                    >
+                      <i className="fa-solid fa-trash-can text-sm" />
+                    </button>
+
+                    <h3 className="font-semibold text-gray-800 pr-6 mb-1 truncate">
+                      {p.name}
+                    </h3>
+
+                    <p className="text-sm text-gray-500 mb-3">{p.academic_year}</p>
+
+                    <Badge variant={status.variant} dot>
+                      {status.label}
+                    </Badge>
+                  </div>
+                );
+              })}
             </div>
           )}
         </Card>

@@ -45,7 +45,7 @@ export interface RegistrationLecturer {
   registration: number;
   lecturer: number;
   lecturer_name?: string;
-  role: 'main' | 'backup' | 'reviewer';
+  role: 'main' | 'option1' | 'option2' | 'reviewer';
   approval_status: 'pending' | 'approved' | 'rejected' | 'skipped';
   responded_at?: string;
   note?: string;
@@ -64,7 +64,7 @@ export interface Registration {
   id: number;
   project_title?: string;
   project_description?: string;
-  is_Thesis?: boolean;
+  wants_thesis_upgrade?: boolean;
   status: RegistrationStatus;
   student_name?: string;
   student_id?: string;
@@ -90,7 +90,7 @@ export interface Registration {
     lecturer_id: number;
     full_name: string;
     email?: string;
-    role: 'main' | 'backup' | 'reviewer';
+    role: 'main' | 'option1' | 'option2' | 'reviewer';
     approval_status: 'pending' | 'approved' | 'rejected' | 'skipped';
     note?: string;
     academic_degree?: string;
@@ -103,6 +103,33 @@ export interface RegistrationPeriod {
   id: number;
   name: string;
   academic_year: string;
+}
+
+export type PeriodStatus =
+  | 'scheduled'
+  | 'student_registration'
+  | 'in_progress'
+  | 'report_submission'
+  | 'closed';
+
+export interface Period {
+  id: number;
+  active: boolean;
+  created_date: string;
+  updated_date: string;
+  name: string;
+  academic_year: string;
+  status: PeriodStatus;
+  student_registration_start: string;
+  student_registration_days: number;
+  execution_duration_weeks: number;
+  report_submission_days: number;
+}
+
+export interface Specialization {
+  id: number;
+  name: string;
+  faculty?: { id?: number; name?: string };
 }
 
 export type ApiCallback<T> = (data: T) => void;

@@ -13,8 +13,8 @@ from theses.validators import (
 class RegistrationPeriodBasicSerializer(serializers.ModelSerializer):
     class Meta:
         model = RegistrationPeriod
-        fields = ['id', 'name', 'academic_year']
-        read_only_fields = ['id']
+        fields = ['id', 'name', 'academic_year', 'status']
+        read_only_fields = ['id', 'status']
 
 
 class RegistrationPeriodSerializer(serializers.ModelSerializer):

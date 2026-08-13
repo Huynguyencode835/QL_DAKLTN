@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'theses.apps.ThesesConfig',
     'drf_yasg',
     'oauth2_provider',
+    'core.apps.CoreConfig'
 ]
 
 MIDDLEWARE = [
@@ -145,3 +146,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024

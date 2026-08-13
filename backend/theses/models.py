@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.utils import timezone
 
 
 class BaseModel(models.Model):
@@ -31,8 +32,6 @@ class User(AbstractUser):
 
     class Meta:
         constraints = [
-            # ADMIN không bắt buộc thuộc khoa nào, các role khác bắt buộc phải có faculty
-            # Cho phép role rỗng ('') để không block createsuperuser (role chưa được set)
             models.CheckConstraint(
                 condition=(
                     models.Q(role='admin') |
@@ -72,7 +71,6 @@ class Major(BaseModel):
 
     class Meta:
         constraints = [
-            # Không cho 2 ngành trùng tên trong cùng 1 khoa (khoa khác thì được trùng)
             models.UniqueConstraint(
                 fields=['faculty', 'major_name'],
                 name='unique_major_name_per_faculty',
@@ -116,11 +114,35 @@ class StudentProfile(BaseModel):
             ),
         ]
 
+class AcademicDegree(BaseModel):
+    class DegreeName(models.TextChoices):
+        MASTER = 'master', 'Thạc sĩ'
+        DOCTOR = 'doctor', 'Tiến sĩ'
+        ASSOC_PROF = 'assoc_prof', 'Phó Giáo sư'
+        PROF = 'prof', 'Giáo sư'
+
+    name = models.CharField(
+        max_length=20,
+        choices=DegreeName.choices,
+        unique=True,
+    )
+
+    max_students_quota = models.PositiveIntegerField(
+        help_text='Số đồ án/luận văn tối đa được hướng dẫn cùng lúc'
+    )
+
+    def __str__(self):
+        return self.get_name_display()
+
 class LecturerProfile(BaseModel):
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, primary_key=True, related_name='lecturer_profile'
     )
-    academic_degree = models.CharField(max_length=100)
+    academic_degree = models.ForeignKey(
+        AcademicDegree,
+        on_delete=models.PROTECT,
+        related_name='lecturers',
+    )
     position = models.CharField(max_length=100, blank=True)
     specializations = models.ManyToManyField(
         'Specialization',
@@ -170,8 +192,6 @@ class ListOfTopics(BaseModel):
 
     class Meta:
         constraints = [
-            # 1 giảng viên không đăng 2 đề tài trùng tên
-            # (bỏ nếu nghiệp vụ cho phép trùng tên đề tài qua các năm khác nhau)
             models.UniqueConstraint(
                 fields=['lecturer', 'title'],
                 name='unique_topic_title_per_lecturer',
@@ -180,15 +200,14 @@ class ListOfTopics(BaseModel):
 
 class RegistrationPeriod(BaseModel):
     class STATUS(models.TextChoices):
-        DRAFT = 'draft', 'Nháp'
+        SCHEDULED = 'scheduled', 'Chờ mở đăng ký'
         STUDENT_REGISTRATION = 'student_registration', 'Đang mở đăng ký'
         IN_PROGRESS = 'in_progress', 'Đang thực hiện đồ án'
         REPORT_SUBMISSION = 'report_submission', 'Đang nhận báo cáo'
         CLOSED = 'closed', 'Đã đóng'
-        ARCHIVED = 'archived', 'Đã lưu trữ'
 
     OPEN_STATUSES = [
-        STATUS.DRAFT,
+        STATUS.SCHEDULED,
         STATUS.STUDENT_REGISTRATION,
         STATUS.IN_PROGRESS,
         STATUS.REPORT_SUBMISSION,
@@ -196,19 +215,26 @@ class RegistrationPeriod(BaseModel):
 
     name = models.CharField(max_length=255)
     academic_year = models.CharField(max_length=20)
-
     student_registration_start = models.DateTimeField(help_text='SV bắt đầu đăng ký')
-    student_registration_end = models.DateTimeField(help_text='SV hết hạn đăng ký')
-
-    report_submission_start = models.DateTimeField(help_text='SV bắt đầu được nộp báo cáo')
-    report_submission_end = models.DateTimeField(help_text='SV hết hạn nộp báo cáo')
+    student_registration_days = models.PositiveSmallIntegerField(
+        default=14,
+        help_text='Số ngày mở cho SV đăng ký, tính từ student_registration_start',
+    )
 
     execution_duration_weeks = models.PositiveSmallIntegerField(
         default=10,
-        help_text='Số tuần thực hiện đồ án, tính từ khi đăng ký được duyệt',
+        help_text=(
+            'Số tuần thực hiện đồ án, tính từ khi hết hạn đăng ký (student_registration_end). '
+            'Dùng để tự động tính report_submission_start.'
+        ),
     )
 
-    status = models.CharField(max_length=20, choices=STATUS.choices, default=STATUS.DRAFT)
+    report_submission_days = models.PositiveSmallIntegerField(
+        default=7,
+        help_text='Số ngày cho phép nộp báo cáo, tính từ report_submission_start',
+    )
+
+    status = models.CharField(max_length=20, choices=STATUS.choices, default=STATUS.SCHEDULED)
 
     faculty = models.ForeignKey(
         Faculty, on_delete=models.CASCADE, null=False, blank=False,
@@ -221,26 +247,34 @@ class RegistrationPeriod(BaseModel):
         limit_choices_to={'role': User.Role.STAFF},
     )
 
+    @property
+    def student_registration_end(self):
+        return self.student_registration_start + timezone.timedelta(days=self.student_registration_days)
+
+    @property
+    def report_submission_start(self):
+        return self.student_registration_end + timezone.timedelta(weeks=self.execution_duration_weeks)
+
+    @property
+    def report_submission_end(self):
+        return self.report_submission_start + timezone.timedelta(days=self.report_submission_days)
+
     class Meta:
         constraints = [
-            # 1 khoa chỉ được có tối đa 1 đợt đang ở trạng thái "mở" tại 1 thời điểm
-            # (chỉ hoạt động trên PostgreSQL - partial unique index)
             models.UniqueConstraint(
                 fields=['faculty'],
                 condition=models.Q(status__in=[
-                    'draft', 'student_registration', 'in_progress', 'report_submission',
+                    'scheduled', 'student_registration', 'in_progress', 'report_submission',
                 ]),
                 name='unique_open_registration_period_per_faculty',
             ),
-            # Ngày kết thúc đăng ký phải sau ngày bắt đầu
             models.CheckConstraint(
-                condition=models.Q(student_registration_end__gt=models.F('student_registration_start')),
-                name='student_registration_end_after_start',
+                condition=models.Q(student_registration_days__gt=0),
+                name='student_registration_days_positive',
             ),
-            # Ngày kết thúc nộp báo cáo phải sau ngày bắt đầu
             models.CheckConstraint(
-                condition=models.Q(report_submission_end__gt=models.F('report_submission_start')),
-                name='report_submission_end_after_start',
+                condition=models.Q(report_submission_days__gt=0),
+                name='report_submission_days_positive',
             ),
         ]
 
@@ -261,26 +295,74 @@ class ProjectRegistration(BaseModel):
     project_title = models.CharField(max_length=255)
     project_description = models.TextField()
 
+    specialization = models.ForeignKey(
+            'Specialization',
+            blank=True,
+            on_delete=models.SET_NULL,
+            null=True,
+            related_name='project_registrations',
+        )
+
     class STATUS(models.TextChoices):
         WAITING_LECTURER_AND_PENDING = 'waiting_lecturer', 'Chờ phân giảng viên hướng dẫn'
         ASSIGNED_LECTURER_AND_PENDING = 'assigned_lecturer', 'Đã phân giảng viên hướng dẫn'
 
     status = models.CharField(max_length=50, default=STATUS.WAITING_LECTURER_AND_PENDING, choices=STATUS.choices)
-    is_Thesis = models.BooleanField(default=False)
+    wants_thesis_upgrade = models.BooleanField(default=False)
+
+    is_thesis = models.BooleanField(default=False)
+
+    upgraded_from = models.OneToOneField(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='upgraded_to',
+        limit_choices_to={'is_thesis': False},
+    )
+
+    final_score = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+
+    # FIX: diagram thể hiện Committee (1) -- (1..*) ProjectRegistration, tức MỘT
+    # ProjectRegistration chỉ thuộc ĐÚNG 1 hội đồng, và 1 hội đồng chấm nhiều đồ án.
+    # Đây là quan hệ 1-nhiều, KHÔNG phải M2M. Field này thay cho
+    # Committee.registrations (ManyToManyField) ở bản trước — đã sửa sai đó tại đây.
+    committee = models.ForeignKey(
+        'Committee',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='registrations',
+        help_text='Hội đồng phụ trách chấm/bảo vệ cho đồ án này (gán sau khi nộp báo cáo cuối kỳ).',
+    )
 
     class Meta:
         constraints = [
-            # 1 sinh viên chỉ được đăng ký 1 lần trong cùng 1 đợt đăng ký
             models.UniqueConstraint(
                 fields=['student', 'registration_period'],
                 name='unique_student_per_registration_period',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(is_thesis=False) |
+                    models.Q(upgraded_from__isnull=False)
+                ),
+                name='thesis_requires_upgraded_from',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(final_score__isnull=True) |
+                    (models.Q(final_score__gte=0) & models.Q(final_score__lte=10))
+                ),
+                name='final_score_between_0_and_10',
             ),
         ]
 
 class RegistrationLecturer(BaseModel):
     class Role(models.TextChoices):
         MAIN = 'main', 'Chính thức'
-        BACKUP = 'backup', 'Dự phòng'
+        OPTION1 = 'option1', 'Tùy chọn 1'
+        OPTION2 = 'option2', 'Tùy chọn 2'
         REVIEWER = 'reviewer', 'Phản biện'
 
     class ApprovalStatus(models.TextChoices):
@@ -288,7 +370,6 @@ class RegistrationLecturer(BaseModel):
         APPROVED = 'approved', 'Đồng ý'
         REJECTED = 'rejected', 'Từ chối'
         SKIPPED = 'skipped', 'Không cần duyệt'
-        PENDING_TRANSFER = 'pending_transfer', 'Chờ chuyển'
 
     registration = models.ForeignKey(
         ProjectRegistration,
@@ -305,98 +386,213 @@ class RegistrationLecturer(BaseModel):
     approval_status = models.CharField(
         max_length=20, choices=ApprovalStatus.choices, default=ApprovalStatus.PENDING
     )
-    responded_at = models.DateTimeField(null=True, blank=True)
-    note = models.TextField(blank=True, null=True)  # lý do từ chối
-    created_at = models.DateTimeField(auto_now_add=True)
+    note = models.TextField(blank=True, null=True)
+    responded_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='Thời điểm giảng viên phản hồi (đồng ý/từ chối) nguyện vọng',
+    )
 
     class Meta:
         constraints = [
-            # Mỗi registration chỉ có đúng 1 người cho mỗi role (main/backup/reviewer)
             models.UniqueConstraint(
                 fields=['registration', 'role'],
                 name='unique_role_per_registration',
             ),
-            # 1 giảng viên không được gán 2 vai trò khác nhau trong cùng registration
             models.UniqueConstraint(
                 fields=['registration', 'lecturer'],
                 name='unique_lecturer_per_registration',
             ),
-            # Đã approved/rejected thì bắt buộc phải có responded_at
+            # FIX: bỏ 'pending_transfer' - giá trị này không tồn tại trong
+            # ApprovalStatus.choices (chỉ có pending/approved/rejected/skipped),
+            # để trong __in làm constraint vô nghĩa (không match được row nào).
             models.CheckConstraint(
                 condition=(
-                    models.Q(approval_status__in=['pending', 'skipped', 'pending_transfer']) |
+                    models.Q(approval_status__in=['pending', 'skipped']) |
                     models.Q(responded_at__isnull=False)
                 ),
                 name='responded_at_required_when_approved_or_rejected',
             ),
         ]
 
+class PeriodicReportSchedule(BaseModel):
+    registrations = models.ManyToManyField(
+        ProjectRegistration,
+        related_name='report_schedules',
+        help_text='Các SV áp dụng lịch này',
+    )
+    sequence_number = models.PositiveSmallIntegerField()
+    title = models.CharField(max_length=255, blank=True)  # vd: "Báo cáo tiến độ tuần 6"
+    deadline = models.DateTimeField()
+    lecturer = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='created_schedules',
+        limit_choices_to={'role': User.Role.LECTURER},
+        help_text='GVHD tạo lịch chung cho các SV mình hướng dẫn',
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['registration', 'sequence_number'],
+                name='unique_schedule_sequence_per_registration',
+            ),
+        ]
+
 class Report(BaseModel):
     class ReportType(models.TextChoices):
-        PERIODIC = 'periodic', 'Báo cáo định kỳ'   # nộp cho GVHD
-        FINAL = 'final', 'Báo cáo cuối kỳ'          # nộp cho khoa
+        PERIODIC = 'periodic', 'Báo cáo định kỳ'
+        FINAL = 'final', 'Báo cáo cuối kỳ'
 
     class Status(models.TextChoices):
         SUBMITTED = 'submitted', 'Đã nộp'
-        REVIEWED = 'reviewed', 'Đã xem/góp ý'       # dùng cho periodic
+        REVIEWED = 'reviewed', 'Đã xem/góp ý'
         APPROVED = 'approved', 'Đã duyệt'
         REJECTED = 'rejected', 'Yêu cầu nộp lại'
         LATE = 'late', 'Nộp trễ'
 
     registration = models.ForeignKey(
-        ProjectRegistration,
-        on_delete=models.CASCADE,
+        ProjectRegistration, on_delete=models.CASCADE, related_name='reports',
+    )
+    schedule = models.ForeignKey(
+        PeriodicReportSchedule,
+        on_delete=models.PROTECT,
+        null=True, blank=True,
         related_name='reports',
+        help_text='Bắt buộc khi report_type=periodic, null khi report_type=final',
     )
     report_type = models.CharField(max_length=20, choices=ReportType.choices)
-
-    # Với periodic: đánh số lần nộp (báo cáo tuần 1, tuần 2...)
-    # Với final: luôn null hoặc = 0, vì chỉ nộp 1 lần
-    sequence_number = models.PositiveSmallIntegerField(null=True, blank=True)
+    sequence_number = models.PositiveSmallIntegerField(
+        help_text='periodic: lấy từ schedule.sequence_number. final: tự tăng theo số lần nộp lại.'
+    )
 
     title = models.CharField(max_length=255, blank=True)
-    file = models.FileField(upload_to='reports/%Y/%m/')
-    note = models.TextField(blank=True)  # ghi chú của sinh viên khi nộp
+    file_key = models.CharField(max_length=500)
+    file_name = models.CharField(max_length=255)
+    file_size = models.PositiveIntegerField()
+    note = models.TextField(blank=True)
 
-    submitted_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.SUBMITTED)
 
-    # Người review: GVHD (periodic) hoặc staff khoa (final)
-    reviewed_by = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
+    reviewed_by_lecturer = models.ForeignKey(
+        RegistrationLecturer, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='reviewed_reports',
-        limit_choices_to={'role': User.Role.LECTURER}
     )
+    feedback = models.TextField(blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
-    feedback = models.TextField(blank=True)  # phản hồi/nhận xét của người review
 
     class Meta:
         constraints = [
-            # Final report chỉ được nộp 1 lần / registration
+            # thay cho unique_final_report_per_registration + unique_periodic_sequence_per_registration
             models.UniqueConstraint(
-                fields=['registration'],
-                condition=models.Q(report_type='final'),
-                name='unique_final_report_per_registration',
+                fields=['registration', 'report_type', 'sequence_number'],
+                name='unique_sequence_per_report_type_per_registration',
             ),
-            # Periodic report: không trùng sequence_number trong cùng registration
-            models.UniqueConstraint(
-                fields=['registration', 'sequence_number'],
-                condition=models.Q(report_type='periodic'),
-                name='unique_periodic_sequence_per_registration',
+            models.CheckConstraint(
+                condition=~models.Q(report_type='periodic') | models.Q(schedule__isnull=False),
+                name='periodic_requires_schedule',
             ),
-            # Reviewed/approved/rejected thì bắt buộc có reviewed_at
+            models.CheckConstraint(
+                condition=~models.Q(report_type='final') | models.Q(schedule__isnull=True),
+                name='final_forbids_schedule',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(reviewed_by_lecturer__isnull=True) | models.Q(report_type='periodic'),
+                name='reviewed_by_lecturer_only_for_periodic',
+            ),
             models.CheckConstraint(
                 condition=(
-                    models.Q(status='submitted') |
+                    models.Q(status__in=['submitted', 'late']) |
                     models.Q(reviewed_at__isnull=False)
                 ),
                 name='reviewed_at_required_when_processed',
             ),
         ]
-
         ordering = ['registration', 'report_type', 'sequence_number']
+
+    def clean(self):
+        # schedule phải khớp registration + report_type
+        if self.schedule_id:
+            if self.schedule.registration_id != self.registration_id:
+                raise ValidationError('schedule phải thuộc đúng registration của report này.')
+            self.sequence_number = self.schedule.sequence_number  # đồng bộ, không lệch
+
+        # final: tự tăng sequence_number nếu chưa set
+        if self.report_type == self.ReportType.FINAL and self.sequence_number is None:
+            last = Report.objects.filter(
+                registration=self.registration, report_type=self.ReportType.FINAL,
+            ).exclude(pk=self.pk).order_by('-sequence_number').first()
+            self.sequence_number = (last.sequence_number + 1) if last else 1
+
+        if self.reviewed_by_lecturer_id:
+            if self.reviewed_by_lecturer.registration_id != self.registration_id:
+                raise ValidationError('Giảng viên review phải là GVHD được phân công cho đúng registration này.')
+            if self.reviewed_by_lecturer.role != RegistrationLecturer.Role.MAIN:
+                raise ValidationError('Chỉ GVHD chính thức (role=MAIN) mới được review báo cáo định kỳ.')
+
+        if self.status == self.Status.REJECTED and not self.feedback.strip():
+            raise ValidationError('Cần ghi rõ lý do khi yêu cầu nộp lại.')
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+class Committee(BaseModel):
+    name = models.CharField(max_length=255)
+    defense_date = models.DateTimeField()
+    location = models.CharField(max_length=255, blank=True)
+
+    # FIX: bỏ ManyToManyField 'registrations' ở đây — quan hệ Committee(1)--(1..*)
+    # ProjectRegistration đã chuyển thành ForeignKey khai báo bên ProjectRegistration
+    # (field `committee`, related_name='registrations'), đúng kiểu 1-nhiều theo diagram.
+
+    faculty = models.ForeignKey(
+        Faculty,
+        on_delete=models.CASCADE,
+        related_name='committees',
+    )
+
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True,
+        related_name='created_committees',
+        limit_choices_to={'role': User.Role.STAFF},
+        help_text='Giáo vụ tạo hội đồng (create by the staff)',
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['faculty', 'name'],
+                name='unique_committee_name_per_faculty',
+            ),
+        ]
+
+class CommitteeMember(BaseModel):
+    class MemberRole(models.TextChoices):
+        CHAIR = 'chair', 'Chủ tịch hội đồng'
+        SECRETARY = 'secretary', 'Thư ký'
+        MEMBER = 'member', 'Ủy viên'
+        REVIEWER = 'reviewer', 'Ủy viên phản biện'
+
+    committee = models.ForeignKey(
+        Committee,
+        on_delete=models.CASCADE,
+        related_name='members',
+    )
+    lecturer = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='committee_memberships',
+        limit_choices_to={'role': User.Role.LECTURER},
+    )
+    role = models.CharField(max_length=20, choices=MemberRole.choices, default=MemberRole.MEMBER)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['committee', 'lecturer'],
+                name='unique_lecturer_per_committee',
+            ),
+        ]
 
 class Grade(BaseModel):
     class GradeType(models.TextChoices):
@@ -410,12 +606,26 @@ class Grade(BaseModel):
         related_name='grades',
     )
     grade_type = models.CharField(max_length=20, choices=GradeType.choices)
-    grader = models.ForeignKey(
-        User,
+    graded_by_lecturer = models.ForeignKey(
+        RegistrationLecturer,
         on_delete=models.SET_NULL,
-        null=True,
-        related_name='given_grades',
-        limit_choices_to={'role': User.Role.LECTURER},
+        null=True, blank=True,
+        related_name='grades_given',
+        help_text='Dùng cho grade_type=supervisor/reviewer. Phải thuộc đúng registration của Grade này.',
+    )
+    graded_by_committee_member = models.ForeignKey(
+        CommitteeMember,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='grades_given',
+        help_text='Dùng cho grade_type=committee. Hội đồng của thành viên này phải đang phụ trách registration.',
+    )
+    is_final = models.BooleanField(
+        default=True,
+        help_text=(
+            'True: điểm chính thức/tổng kết dùng để tính final_score. '
+            'False: điểm thành phần do 1 thành viên hội đồng chấm, chờ tổng hợp.'
+        ),
     )
     score = models.DecimalField(max_digits=4, decimal_places=2)
     weight = models.DecimalField(
@@ -427,9 +637,17 @@ class Grade(BaseModel):
 
     class Meta:
         constraints = [
+            # FIX: bị revert về (registration, grade_type) ở bản gửi lần này —
+            # quay lại đây, đổi sang (registration, grade_type, graded_by_lecturer)
+            # + (registration, grade_type, graded_by_committee_member) để cho phép
+            # NHIỀU ủy viên hội đồng cùng chấm 1 registration (mỗi người 1 lần).
             models.UniqueConstraint(
-                fields=['registration', 'grade_type'],
-                name='unique_grade_type_per_registration',
+                fields=['registration', 'grade_type', 'graded_by_lecturer'],
+                name='unique_grade_per_lecturer',
+            ),
+            models.UniqueConstraint(
+                fields=['registration', 'grade_type', 'graded_by_committee_member'],
+                name='unique_grade_per_committee_member',
             ),
             models.CheckConstraint(
                 condition=models.Q(score__gte=0) & models.Q(score__lte=10),
@@ -439,4 +657,43 @@ class Grade(BaseModel):
                 condition=models.Q(weight__gte=0) & models.Q(weight__lte=1),
                 name='grade_weight_between_0_and_1',
             ),
+            # FIX: CheckConstraint XOR này bị mất ở bản gửi lần này, thêm lại.
+            models.CheckConstraint(
+                condition=(
+                    (models.Q(graded_by_lecturer__isnull=False) & models.Q(graded_by_committee_member__isnull=True)) |
+                    (models.Q(graded_by_lecturer__isnull=True) & models.Q(graded_by_committee_member__isnull=False))
+                ),
+                name='grade_graded_by_lecturer_xor_committee_member',
+            ),
         ]
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        # FIX: toàn bộ method clean() này bị mất ở bản gửi lần này, thêm lại.
+        # Validate cross-table không thể biểu diễn bằng CheckConstraint thuần DB.
+        if self.grade_type in (self.GradeType.SUPERVISOR, self.GradeType.REVIEWER):
+            if not self.graded_by_lecturer_id:
+                raise ValidationError('grade_type=supervisor/reviewer bắt buộc phải có graded_by_lecturer.')
+            if self.graded_by_lecturer.registration_id != self.registration_id:
+                raise ValidationError('graded_by_lecturer phải thuộc đúng registration của Grade này.')
+            expected_role = (
+                RegistrationLecturer.Role.MAIN
+                if self.grade_type == self.GradeType.SUPERVISOR
+                else RegistrationLecturer.Role.REVIEWER
+            )
+            if self.graded_by_lecturer.role != expected_role:
+                raise ValidationError(
+                    f'grade_type={self.grade_type} yêu cầu graded_by_lecturer có role={expected_role}.'
+                )
+
+        if self.grade_type == self.GradeType.COMMITTEE:
+            if not self.graded_by_committee_member_id:
+                raise ValidationError('grade_type=committee bắt buộc phải có graded_by_committee_member.')
+            # FIX: điều kiện kiểm tra cũng đổi theo vì Committee.registrations
+            # giờ là related_name của FK (ProjectRegistration.committee), không
+            # còn là M2M, nên so sánh trực tiếp FK thay vì .filter(pk=...).exists()
+            if self.graded_by_committee_member.committee_id != self.registration.committee_id:
+                raise ValidationError(
+                    'graded_by_committee_member phải thuộc hội đồng đang phụ trách registration này.'
+                )

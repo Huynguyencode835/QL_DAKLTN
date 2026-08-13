@@ -13,11 +13,15 @@ export const endpoints = {
     'topic': (idLectures: string | number) => `api/lecturers/${idLectures}/topics/`,
     'topicDetail': (idLectures: string | number, idTopic: string | number) => `api/lecturers/${idLectures}/topics/${idTopic}`,
     'registrationPeriods': 'api/registration-periods/',
+    'registrationPeriodDetail': (periodId: string | number) => `api/registration-periods/${periodId}/`,
     'registrations': (periodId: string | number) => `api/registration-periods/${periodId}/registrations/`,
     'registrationDetail': (periodId: string | number, regId: string | number) => `api/registration-periods/${periodId}/registrations/${regId}/`,
     'approveRegistration': (periodId: string | number, regId: string | number) => `api/registration-periods/${periodId}/registrations/${regId}/approve/`,
     'rejectRegistration': (periodId: string | number, regId: string | number) => `api/registration-periods/${periodId}/registrations/${regId}/reject/`,
     'addLecturer': (periodId: string | number, regId: string | number) => `api/registration-periods/${periodId}/registrations/${regId}/add_lecturer/`,
+    'specialization': 'api/specialization/',
+    'reports': 'api/reports/',
+    'reportDownload': (id: string | number) => `api/reports/${id}/download/`,
 };
 
 

@@ -1,4 +1,5 @@
 from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
 from theses.models import User, ProjectRegistration, RegistrationLecturer
 
@@ -69,26 +70,6 @@ class IsLecturerOrStaffOrAdmin(IsAuthenticated):
         )
 
 
-class IsTopicOwner(IsAuthenticated):
-    def has_object_permission(self, request, view, obj):
-        return (
-            super().has_permission(request, view) and
-            request.user.role == User.Role.LECTURER and
-            hasattr(request.user, 'lecturer_profile') and
-            obj.lecturer == request.user.lecturer_profile
-        )
-
-
-class IsSupervisingLecturer(IsAuthenticated):
-    def has_object_permission(self, request, view, obj):
-        return (
-            super().has_permission(request, view) and
-            request.user.role == User.Role.LECTURER and
-            obj.lecturer is not None and
-            obj.lecturer == request.user
-        )
-
-
 class IsStaffSameFaculty(IsAuthenticated):
     def has_permission(self, request, view):
         return (
@@ -112,7 +93,7 @@ class IsRegistrationOwnerOrStaff(IsAuthenticated):
         if request.user.role == User.Role.STUDENT and obj.student == request.user:
             return True
         if request.user.role == User.Role.LECTURER and obj.lecturer_assignments.filter(
-            lecturer=request.user, role=RegistrationLecturer.Role.MAIN,
+            lecturer=request.user,
         ).exists():
             return True
         if request.user.role == User.Role.STAFF:
@@ -187,7 +168,8 @@ class IsSupervisingLecturerForRegistration(IsAuthenticated):
         except ProjectRegistration.DoesNotExist:
             return False
         if not registration.lecturer_assignments.filter(
-            lecturer=request.user, role=RegistrationLecturer.Role.MAIN,
+            lecturer=request.user,
+            role__in=[RegistrationLecturer.Role.OPTION1, RegistrationLecturer.Role.OPTION2],
         ).exists():
             return False
         view._registration = registration
@@ -218,4 +200,70 @@ class IsStaffSameFacultyForRegistration(IsAuthenticated):
         return True
 
     def has_object_permission(self, request, view, obj):
+        return True
+
+
+class CanAccessReport(IsAuthenticated):
+    """Xem/tải báo cáo: SV chủ đăng ký, GV MAIN, staff cùng khoa, superuser."""
+
+    def _can_view_registration(self, request, registration):
+        user = request.user
+        if user.is_superuser:
+            return True
+        if user.role == User.Role.STUDENT:
+            return registration.student_id == user.id
+        if user.role == User.Role.LECTURER:
+            return registration.lecturer_assignments.filter(
+                lecturer_id=user.id,
+                role=RegistrationLecturer.Role.MAIN,
+            ).exists()
+        if user.role == User.Role.STAFF:
+            return (user.faculty is not None and
+                    registration.student.faculty == user.faculty)
+        return False
+
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        if view.action == 'list':
+            registration_id = request.query_params.get('registration_id')
+            if not registration_id:
+                raise ValidationError('Thiếu tham số registration_id')
+            try:
+                registration = ProjectRegistration.objects.select_related(
+                    'student__faculty').get(id=registration_id)
+            except ProjectRegistration.DoesNotExist:
+                raise NotFound('Không tìm thấy đăng ký đề tài')
+            return self._can_view_registration(request, registration)
+        return True
+
+    def has_object_permission(self, request, view, obj):
+        if not super().has_permission(request, view):
+            return False
+        return self._can_view_registration(request, obj.registration)
+
+
+class CanCreateReport(IsAuthenticated):
+    """Chỉ SV chủ sở hữu đăng ký mới được nộp báo cáo."""
+
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        if request.user.role != User.Role.STUDENT:
+            raise PermissionDenied('Chỉ sinh viên mới được nộp báo cáo')
+
+        registration_id = request.data.get('registration_id')
+        if not registration_id:
+            raise ValidationError('Thiếu tham số registration_id')
+
+        try:
+            registration = ProjectRegistration.objects.select_related(
+                'registration_period').get(id=registration_id)
+        except (ProjectRegistration.DoesNotExist, ValueError, TypeError):
+            raise NotFound('Không tìm thấy đăng ký đề tài')
+
+        if registration.student_id != request.user.id:
+            raise PermissionDenied('Bạn không có quyền nộp báo cáo cho đăng ký này')
+
+        view._registration = registration
         return True

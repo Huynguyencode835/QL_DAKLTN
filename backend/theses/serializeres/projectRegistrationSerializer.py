@@ -1,6 +1,14 @@
 from rest_framework import serializers
-from theses.models import ProjectRegistration, RegistrationLecturer, User
+from theses.models import ProjectRegistration, RegistrationLecturer, Specialization, User
+from theses.serializeres.userSerializer import SpecializationSerializer
 from theses.validators import validate_non_blank
+
+
+class SpecializationNestedField(serializers.PrimaryKeyRelatedField):
+    """Nhận pk khi ghi (vd: 2), trả nested object khi đọc."""
+
+    def to_representation(self, value):
+        return SpecializationSerializer(value).data
 
 
 class ProjectRegistrationSerializer(serializers.ModelSerializer):
@@ -9,6 +17,10 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
     student_name = serializers.SerializerMethodField(read_only=True)
     lecturer_name = serializers.SerializerMethodField(read_only=True)
     lecturer_assignments = serializers.SerializerMethodField(read_only=True)
+    specialization = SpecializationNestedField(
+        queryset=Specialization.objects.all(),
+        required=False, allow_null=True,
+    )
 
     advisor1 = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     advisor2 = serializers.IntegerField(write_only=True, required=False, allow_null=True)
@@ -18,12 +30,15 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProjectRegistration
         fields = [
-            'id', 'student', 'avatar', 'student_id', 'student_name',
+            'id', 'student', 'avatar', 'student_id', 'specialization', 'student_name',
             'lecturer_name', 'lecturer_assignments',
-            'project_title', 'project_description', 'is_Thesis', 'status',
+            'project_title', 'project_description', 'wants_thesis_upgrade', 'status',
+            'is_thesis', 'registration_period',
             'advisor1', 'advisor2', 'note1', 'note2',
         ]
-        read_only_fields = ['id', 'student', 'created_date', 'updated_date', 'active']
+        read_only_fields = [
+            'id', 'student', 'registration_period', 'created_date', 'updated_date', 'active',
+        ]
         extra_kwargs = {
             'project_title': {'max_length': 255},
         }
@@ -111,6 +126,12 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
             if a2 is not None and a1 is None:
                 raise serializers.ValidationError('Vui lòng chọn nguyện vọng 1 trước khi chọn nguyện vọng 2.')
 
+            specialization = attrs.get('specialization')
+            if specialization and specialization.faculty_id != request.user.faculty_id:
+                raise serializers.ValidationError(
+                    'Chuyên ngành phải thuộc cùng khoa với sinh viên.'
+                )
+
         if request.method in ('PUT', 'PATCH') and request.user.role in (
             User.Role.LECTURER, User.Role.STUDENT
         ):
@@ -134,7 +155,7 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
             RegistrationLecturer.objects.create(
                 registration=registration,
                 lecturer_id=advisor1,
-                role=RegistrationLecturer.Role.MAIN,
+                role=RegistrationLecturer.Role.OPTION1,
                 approval_status=RegistrationLecturer.ApprovalStatus.PENDING,
                 note=note1,
             )
@@ -142,14 +163,10 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
             RegistrationLecturer.objects.create(
                 registration=registration,
                 lecturer_id=advisor2,
-                role=RegistrationLecturer.Role.BACKUP,
-                approval_status=RegistrationLecturer.ApprovalStatus.PENDING_TRANSFER,
+                role=RegistrationLecturer.Role.OPTION2,
+                approval_status=RegistrationLecturer.ApprovalStatus.PENDING,
                 note=note2,
             )
-
-        if advisor1:
-            registration.status = ProjectRegistration.STATUS.ASSIGNED_LECTURER_AND_PENDING
-            registration.save(update_fields=['status'])
 
         return registration
 
@@ -202,7 +219,9 @@ class ProjectRegistrationDetailSerializer(ProjectRegistrationSerializer):
                 'role': a.role,
                 'approval_status': a.approval_status,
                 'note': a.note,
-                'academic_degree': profile.academic_degree if profile else None,
+                'academic_degree': (
+                    profile.academic_degree.get_name_display() if profile else None
+                ),
                 'specializations': [s.name for s in profile.specializations.all()] if profile else [],
             })
         return result
@@ -213,23 +232,26 @@ class BaseRegistrationApprovalSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         registration = self.context.get('registration')
+        request = self.context.get('request')
+        if request is None or not request.user.is_authenticated:
+            raise serializers.ValidationError('Không xác định được người duyệt.')
         assignment = registration.lecturer_assignments.filter(
-            role=RegistrationLecturer.Role.MAIN,
+            lecturer=request.user,
+            role__in=[RegistrationLecturer.Role.OPTION1, RegistrationLecturer.Role.OPTION2],
+            approval_status=RegistrationLecturer.ApprovalStatus.PENDING,
         ).first()
         if not assignment:
-            raise serializers.ValidationError('Đăng ký này chưa có giảng viên hướng dẫn.')
-        if assignment.approval_status != RegistrationLecturer.ApprovalStatus.PENDING:
-            raise serializers.ValidationError(self.error_msg)
+            raise serializers.ValidationError('Bạn không có nguyện vọng nào đang chờ duyệt.')
         attrs['assignment'] = assignment
         return attrs
 
 
 class ApproveRegistrationSerializer(BaseRegistrationApprovalSerializer):
-    error_msg = 'Chỉ duyệt được đăng ký ở trạng thái chờ duyệt.'
+    pass
 
 
 class RejectRegistrationSerializer(BaseRegistrationApprovalSerializer):
-    error_msg = 'Chỉ từ chối được đăng ký ở trạng thái chờ duyệt.'
+    pass
 
 
 class AddLecturerSerializer(serializers.Serializer):

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { useModal } from '../hooks';
+import { useModal, usePageHeader } from '../hooks';
 import { fetchWithAuth, createWithAuth, updatePatchWithAuth, deleteWithAuth } from '../utils/ApiHelper';
 import { endpoints } from '../config/Apis';
 import Card from '../components/Ui/Card';
@@ -26,6 +26,11 @@ const STATUS_FILTER_OPTIONS = [
 export default function TopicManagement() {
   const { openModal, closeModal } = useModal();
   const [topics, setTopics] = useState<any[]>([]);
+
+  usePageHeader({
+    title: 'Quản lý Đề tài',
+    description: 'Danh sách đề tài gợi ý của giảng viên.',
+  });
   const [loading, setLoading] = useState(true);
   const [difficultyFilter, setDifficultyFilter] = useState('');
   const [form, setForm] = useState({ ...emptyForm });
@@ -161,13 +166,6 @@ export default function TopicManagement() {
   return (
     <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
       <div className="max-w-5xl mx-auto w-full space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">Quản lý Đề tài</h2>
-            <p className="text-gray-600">Danh sách đề tài gợi ý của giảng viên.</p>
-          </div>
-        </div>
-
         <Card variant="elevated" bodyClassName="space-y-4">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
@@ -215,7 +213,7 @@ export default function TopicManagement() {
               </p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-gray-50 overflow-x-auto overflow-y-auto max-h-[520px]">
               {filteredTopics.map((topic) => {
                 const diff = DIFFICULTY_CONFIG[topic.difficulty_level] || DIFFICULTY_CONFIG.medium;
                 return (

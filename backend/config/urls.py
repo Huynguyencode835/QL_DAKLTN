@@ -22,11 +22,11 @@ from django.urls import path, re_path, include
 
 schema_view = get_schema_view(
     openapi.Info(
-        title="Course API",
+        title="Theses API",
         default_version='v1',
-        description="APIs for CourseApp",
-        contact=openapi.Contact(email="thanh.dh@ou.edu.vn"),
-        license=openapi.License(name="Dương Hữu Thành@2025"),
+        description="APIs for ThesesWeb",
+        contact=openapi.Contact(email="2351050059huy@ou.edu.vn"),
+        license=openapi.License(name="Nguyễn Quốc Huy@2026"),
     ),
     public=True,
     permission_classes=(permissions.AllowAny,),

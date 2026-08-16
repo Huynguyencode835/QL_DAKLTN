@@ -4,6 +4,18 @@
 
 Hệ thống web quản lý toàn bộ quy trình đăng ký và thực hiện đồ án / khóa luận tốt nghiệp của sinh viên, bao gồm: đăng ký đề tài, phân giảng viên hướng dẫn, xét duyệt, nộp báo cáo và chấm điểm.
 
+## 🌐 Triển khai (Deploy)
+
+| Thành phần | URL |
+| --- | --- |
+| **Frontend** | https://thesis-portal-ou.vercel.app/ |
+| **Backend API** | https://ql-dakltn.onrender.com |
+| **Swagger UI** | https://ql-dakltn.onrender.com/swagger/ |
+| **Redoc** | https://ql-dakltn.onrender.com/redoc/ |
+| **Django Admin** | https://ql-dakltn.onrender.com/admin/ |
+
+> Frontend production trỏ về backend qua biến môi trường (`VITE_API_URL`, `VITE_AUTH_URL`) — xem phần [Cấu hình môi trường](#-cấu-hình-môi-trường).
+
 ## 🎯 Mục tiêu & Phạm vi
 
 Hệ thống phục vụ 4 nhóm vai trò với các nghiệp vụ riêng biệt:
@@ -41,6 +53,7 @@ QL_DAKLTN/
 ```text
 backend/
 ├── config/                 # Cấu hình dự án (settings, urls, wsgi, asgi)
+├── core/                   # Tiện ích chung (r2_client.py — lưu file R2)
 ├── theses/
 │   ├── models.py           # Mô hình dữ liệu (User, Faculty, ... Report, Grade)
 │   ├── permissions.py      # Tầng phân quyền theo vai trò
@@ -93,8 +106,8 @@ Các entity chính trong `backend/theses/models.py`:
 - **RegistrationPeriod** — đợt đăng ký (nhiều trạng thái: draft → student_registration → in_progress → report_submission → closed → archived)
 - **ProjectRegistration** — phiếu đăng ký của sinh viên
 - **RegistrationLecturer** — phân công giảng viên cho phiếu đăng ký (main/backup/reviewer, trạng thái pending/approved/rejected)
-- **Report** — báo cáo định kỳ / cuối kỳ *(backend có model, chưa có API đầy đủ)*
-- **Grade** — điểm GVHD / phản biện / hội đồng *(backend có model, chưa có API đầy đủ)*
+- **Report** — báo cáo định kỳ / cuối kỳ (nộp file lên Cloudflare R2, trạng thái submitted/reviewed/approved/rejected/late)
+- **Grade** — điểm GVHD / phản biện / hội đồng *(backend có model, chưa có API)*
 
 > Các ràng buộc nghiệp vụ quan trọng được thực thi bằng `CheckConstraint` / `UniqueConstraint` cấp DB (vd: một khoa chỉ có tối đa 1 đợt đang "mở", một sinh viên chỉ đăng ký 1 lần / đợt, không trùng đề tài của cùng giảng viên...).
 
@@ -107,16 +120,21 @@ API (`/api`):
 - `users/profile` — xem thông tin hồ sơ theo vai trò
 - `users/topics` — giảng viên quản lý (CRUD) danh sách đề tài của mình
 - `lecturers` — danh sách / chi tiết giảng viên + đề tài theo khoa
-- `registration-periods` — danh sách / tạo đợt đăng ký (giáo vụ)
+- `specialization` — danh sách chuyên ngành
+- `registration-periods` — danh sách / tạo đợt đăng ký (giáo vụ), hỗ trợ đợt `current` đang mở
 - `registration-periods/:id/registrations` — danh sách & tạo đăng ký (sinh viên)
 - `.../registrations/:rid/` — chi tiết đăng ký
 - `.../approve` `.../reject` — giảng viên duyệt/từ chối nguyện vọng
 - `.../add_lecturer` — giáo vụ phân giảng viên hướng dẫn
+- `reports` — sinh viên nộp báo cáo định kỳ / cuối kỳ (file lưu trên Cloudflare R2)
+- `reports/:id/download` — tải file báo cáo qua presigned URL
+- `reports/:id/review` — giảng viên xem / góp ý / duyệt báo cáo định kỳ
 
 Ngoài ra:
 - **Phân quyền chi tiết** theo vai trò & khoa (`theses/permissions.py`)
 - **Xác thực OAuth2** (password grant) với client id/secret
 - **Validator chống dữ liệu không hợp lệ** & ký tự nguy hiểm (`validators.py`)
+- **Lưu trữ file báo cáo** trên Cloudflare R2 (`core/r2_client.py`)
 - **Script seed dữ liệu mẫu** phong phú (`seed.py`)
 
 ## ✅ Tính năng đã có trên giao diện (Frontend)
@@ -124,10 +142,14 @@ Ngoài ra:
 | Route | Vai trò | Mô tả |
 | --- | --- | --- |
 | `/login` | Tất cả | Đăng nhập qua OAuth2 |
-| `/` | Tất cả | Dashboard *(còn dữ liệu mô phỏng - chưa nối API)* |
+| `/` | Tất cả | Dashboard *(đang là trang placeholder - chưa triển khai)* |
 | `/profile` | Tất cả | Xem hồ sơ cá nhân theo vai trò |
+| `/period` | Tất cả | Xem đợt đồ án / khóa luận theo trạng thái |
 | `/topic-registration` | Sinh viên | Đăng ký đồ án / khóa luận, chọn GV, chọn đề tài |
+| `/reports` | Sinh viên | Nộp & quản lý báo cáo định kỳ / cuối kỳ |
 | `/topic-management` | Giảng viên | Quản lý đề tài gợi ý (CRUD) |
+| `/report-schedule` | Giảng viên | Quản lý báo cáo định kỳ *(placeholder - chưa triển khai)* |
+| `/grades-and-results` | Sinh viên / Giảng viên | Điểm & Kết quả *(placeholder - chưa triển khai)* |
 | `/registration-periods` | Giáo vụ | Tạo / quản lý đợt đăng ký |
 | `/students` | Giảng viên / Giáo vụ | Danh sách sinh viên & đăng ký, phân GVHD, duyệt |
 
@@ -207,16 +229,31 @@ DB_USER=<user_postgres>
 DB_PASSWORD=<password>
 DB_HOST=localhost
 DB_PORT=5432
+
+# OAuth2 client (lấy từ bảng oauth2_provider_application)
+CLIENT_ID=<client_id_oauth>
+CLIENT_SECRET=<client_secret_oauth>
+
+# Cloudflare R2 — lưu trữ file báo cáo
+R2_ACCOUNT_ID=<account_id>
+R2_ACCESS_KEY_ID=<access_key_id>
+R2_SECRET_ACCESS_KEY=<secret_access_key>
+R2_BUCKET_NAME=internship-reports
+R2_ENDPOINT=https://<account_id>.r2.cloudflarestorage.com
 ```
 
 ### Frontend `.env`
 
 ```ini
+# Local dev
 VITE_API_URL=http://127.0.0.1:8000
 VITE_CLIENT_ID_APP=<client_id_oauth>
 VITE_CLIENT_SECRET_APP=<client_secret_oauth>
 VITE_AUTH_URL=http://127.0.0.1:8000
 ```
+
+> **Production (Vercel):** set các biến sau trên Vercel để frontend trỏ về backend đã deploy:
+> `VITE_API_URL=https://ql-dakltn.onrender.com` và `VITE_AUTH_URL=https://ql-dakltn.onrender.com` (giữ nguyên client_id/secret).
 
 > **Lưu ý:** các file `.env` đều nằm trong `.gitignore` và **không được** đẩy lên repo. Tạo file `.env` từ mẫu `.env.example`. client_id/secret lấy từ bảng `oauth2_provider_application` trong DB (do chưa có UI tạo app OAuth).
 
@@ -242,7 +279,6 @@ VITE_AUTH_URL=http://127.0.0.1:8000
 Dự án mới đang ở giai đoạn đầu; luồng **đăng ký – xét duyệt – phân GVHD** đã tương đối hoàn chỉnh. Các hạng mục tiếp theo:
 
 ### Backend
-- [ ] Hoàn thiện API cho **Report** (nộp báo cáo định kỳ / cuối kỳ, duyệt báo cáo)
 - [ ] Hoàn thiện API cho **Grade** (chấm điểm GVHD / phản biện / hội đồng)
 - [ ] API quản lý **Faculty / Major / Specialization** (admin)
 - [ ] Chuyển trạng thái `RegistrationPeriod` tự động theo thời gian (draft → open → ...)
@@ -251,8 +287,8 @@ Dự án mới đang ở giai đoạn đầu; luồng **đăng ký – xét duy�
 - [ ] Viết test tự động (`tests.py` hiện đang trống)
 
 ### Frontend
-- [ ] Nối API cho trang **Home** (hiện dùng dữ liệu mock)
-- [ ] Trang **nộp & quản lý báo cáo**, **chấm điểm / kết quả** (hạn nộp, điểm)
+- [ ] Trang **Home / Dashboard** (hiện là placeholder)
+- [ ] Trang **quản lý báo cáo** cho giảng viên (`/report-schedule`) và trang **chấm điểm / kết quả** (`/grades-and-results`)
 - [ ] Trang **quản lý hệ thống** cho admin
 - [ ] Chức năng **Chỉnh sửa hồ sơ** trong trang `/profile`
 - [ ] Trang `registration-periods` — thêm tính năng **cập nhật** đợt
@@ -260,13 +296,3 @@ Dự án mới đang ở giai đoạn đầu; luồng **đăng ký – xét duy�
 - [ ] Thông báo (bell) và trung tâm trợ giúp
 
 ---
-
-## 📚 Tài nguyên & Tài liệu liên quan
-
-- Swagger UI: `http://127.0.0.1:8000/swagger/`
-- Redoc: `http://127.0.0.1:8000/redoc/`
-- Django Admin: `http://127.0.0.1:8000/admin/`
-
----
-
-> **Lưu ý phát triển:** luôn kiểm tra lại `.env` của backend (PostgreSQL) và của frontend (OAuth client, API URL) trước khi để chạy. Xin đừng commit bất kỳ file `.env` nào.

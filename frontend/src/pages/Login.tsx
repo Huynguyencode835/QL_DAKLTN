@@ -30,7 +30,7 @@ export default function LoginForm() {
         grant_type: "password",
       };
 
-      const authUrl = import.meta.env.VITE_AUTH_URL || "http://127.0.0.1:8000";
+      const authUrl = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
       const res = await axios.post(
         `${authUrl}/o/token/`,
         body,

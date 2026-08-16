@@ -27,7 +27,11 @@ SECRET_KEY = 'django-insecure-)+5j8!i*rc29b4vqm08*4*!ayf0pu$(c1&4q^r(r$lmx2)t3co
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    'https://ql-dakltn.onrender.com',
+    'localhost',
+    '127.0.0.1',
+]
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",

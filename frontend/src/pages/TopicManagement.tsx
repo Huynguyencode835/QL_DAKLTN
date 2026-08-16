@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { useModal, usePageHeader } from '../hooks';
+import { useModal, usePageHeader, useToast } from '../hooks';
 import { fetchWithAuth, createWithAuth, updatePatchWithAuth, deleteWithAuth } from '../utils/ApiHelper';
 import { endpoints } from '../config/Apis';
 import Card from '../components/Ui/Card';
@@ -25,6 +25,7 @@ const STATUS_FILTER_OPTIONS = [
 
 export default function TopicManagement() {
   const { openModal, closeModal } = useModal();
+  const toast = useToast();
   const [topics, setTopics] = useState<any[]>([]);
 
   usePageHeader({
@@ -70,17 +71,34 @@ export default function TopicManagement() {
       technology: form.technology,
       difficulty_level: form.difficulty_level,
     };
-    const onSuccess = () => { loadTopics(); setFormModalOpen(false); resetForm(); };
+    const onSuccess = () => {
+      loadTopics();
+      setFormModalOpen(false);
+      resetForm();
+      toast.success(editingId ? 'Cập nhật thành công' : 'Lưu thành công', editingId ? 'Đề tài đã được cập nhật' : 'Đề tài đã được tạo');
+    };
+    const onError = (type: string, msg: string) => {
+      toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
+    };
 
     if (editingId) {
-      await updatePatchWithAuth(endpoints.TopicDetail(editingId), body, onSuccess, () => { }, setSubmitting);
+      await updatePatchWithAuth(endpoints.TopicDetail(editingId), body, onSuccess, onError, setSubmitting);
     } else {
-      await createWithAuth(endpoints.myTopic, body, onSuccess, () => { }, setSubmitting);
+      await createWithAuth(endpoints.myTopic, body, onSuccess, onError, setSubmitting);
     }
   };
 
   const handleDelete = async (id: number) => {
-    await deleteWithAuth(endpoints.TopicDetail(id), () => loadTopics(), () => { });
+    await deleteWithAuth(
+      endpoints.TopicDetail(id),
+      () => {
+        loadTopics();
+        toast.success('Xóa thành công', 'Đề tài đã bị xóa');
+      },
+      (type: string, msg: string) => {
+        toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
+      },
+    );
   };
 
   const openFormModal = (topic: any = null) => {

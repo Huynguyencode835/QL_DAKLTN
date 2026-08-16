@@ -12,23 +12,46 @@ import NotFound from "../pages/NotFound"
 import { UserProvider } from "../contexts/UserContext";
 import { ModalProvider } from "../contexts/ModalContext";
 import { PageHeaderProvider } from "../contexts/PageHeaderContext";
+import { ToastProvider } from "../contexts/ToastContext";
 import PeriodStatusPage from "../pages/Period";
+import { Children } from "react";
+import ProtectedRoute from "../components/ProtectedRoute";
+import GradesAndResults from "../pages/Student/GradesAndResults";
+import ReportSchedule from "../pages/Lecturer/ReportSchedule";
 
 export const router = createBrowserRouter([
     {
         path: "/",
-        element: <UserProvider><ModalProvider><PageHeaderProvider><MainLayout /></PageHeaderProvider></ModalProvider></UserProvider>,
+        element: (
+            <UserProvider>
+                <ToastProvider>
+                    <ModalProvider>
+                        <PageHeaderProvider>
+                            <MainLayout />
+                        </PageHeaderProvider>
+                    </ModalProvider>
+                </ToastProvider>
+            </UserProvider>
+        ),
         children: [
-            {index: true, element: <Home />},
-            {path: "profile", element: <Profile />},
-            {path: "topic-registration", element: <TopicRegistration />},
-            {path: "reports", element: <ReportsUpLoad />},
-            {path: "students", element: <ListStudentsAndRegistration />},
-            {path: "topic-management", element: <TopicManagement />},
-            {path: "registration-periods", element: <RegistrationPeriodManagement />},
-            {path: "period", element: <PeriodStatusPage />},
+            {
+                element: <ProtectedRoute />,
+                children: [
+                    { index: true, element: <Home /> },
+                    { path: "profile", element: <Profile /> },
+                    { path: "topic-registration", element: <TopicRegistration /> },
+                    { path: "reports", element: <ReportsUpLoad /> },
+                    { path: "students", element: <ListStudentsAndRegistration /> },
+                    { path: "topic-management", element: <TopicManagement /> },
+                    { path: "registration-periods", element: <RegistrationPeriodManagement /> },
+                    { path: "period", element: <PeriodStatusPage /> },
+                    { path : "grades-and-results", element: <GradesAndResults />},
+                    { path : "report-schedule", element: <ReportSchedule />}
+
+                ]
+            }
         ]
     },
-    {path: "login", element: <UserProvider><LoginForm /></UserProvider>},
-    { path: "*", element: <NotFound/> }
+    { path: "login", element: <UserProvider><ToastProvider><LoginForm /></ToastProvider></UserProvider> },
+    { path: "*", element: <NotFound /> }
 ])

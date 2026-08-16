@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useModal, usePageHeader } from '../hooks';
+import { useModal, usePageHeader, useToast } from '../hooks';
 import { fetchWithAuth, createWithAuth, deleteWithAuth } from '../utils/ApiHelper';
 import { endpoints } from '../config/Apis';
 import Card, { SectionCard } from '../components/Ui/Card';
@@ -78,11 +78,39 @@ function PeriodInfo({ icon, label, value }: { icon: string; label: string; value
 
 export default function RegistrationPeriodManagement() {
   const { openModal, closeModal } = useModal();
+  const toast = useToast();
   const [periods, setPeriods] = useState<RegistrationPeriod[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ ...emptyForm });
   const [submitting, setSubmitting] = useState(false);
   const [formModalOpen, setFormModalOpen] = useState(false);
+
+  const CARD_STYLE: Record<string, string> = {
+    scheduled: 'bg-gray-50 hover:bg-gray-100',
+    student_registration: 'bg-blue-50 hover:bg-blue-100',
+    in_progress: 'bg-violet-50 hover:bg-violet-100',
+    report_submission: 'bg-amber-50 hover:bg-amber-100',
+    closed: 'bg-green-50 hover:bg-green-100',
+    archived: 'bg-gray-50 hover:bg-gray-100',
+  };
+
+  const CARD_ICON_STYLE: Record<string, string> = {
+    scheduled: 'bg-gray-200 text-gray-500',
+    student_registration: 'bg-blue-500 text-white',
+    in_progress: 'bg-violet-500 text-white',
+    report_submission: 'bg-amber-500 text-white',
+    closed: 'bg-green-500 text-white',
+    archived: 'bg-gray-200 text-gray-500',
+  };
+
+  const STATUS_ICON: Record<string, string> = {
+    scheduled: 'fa-solid fa-hourglass-half',
+    student_registration: 'fa-solid fa-user-check',
+    in_progress: 'fa-solid fa-spinner',
+    report_submission: 'fa-solid fa-file-arrow-up',
+    closed: 'fa-solid fa-lock',
+    archived: 'fa-solid fa-box-archive',
+  };
 
   usePageHeader({
     title: 'Quản lý đợt đăng ký',
@@ -137,33 +165,13 @@ export default function RegistrationPeriodManagement() {
         loadPeriods();
         setFormModalOpen(false);
         resetForm();
+        toast.success('Tạo đợt thành công', 'Đợt đăng ký đã được tạo');
       },
-      () => { },
+      (type: string, msg: string) => {
+        toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
+      },
       setSubmitting,
     );
-  };
-
-  const handleDelete = (id: number) => {
-    openModal({
-      title: 'Xác nhận xóa',
-      description: 'Bạn có chắc chắn muốn xóa đợt đăng ký này?',
-      icon: 'fa-solid fa-triangle-exclamation',
-      size: 'sm',
-      footer: (
-        <div className="flex items-center gap-2">
-          <Button variant="danger" size="sm" icon="fa-solid fa-trash-can" onClick={() => {
-            deleteWithAuth(
-              `${endpoints.registrationPeriods}${id}/`,
-              () => { loadPeriods(); closeModal(); },
-              () => { },
-            );
-          }}>
-            Xóa
-          </Button>
-          <Button variant="outline" size="sm" onClick={closeModal}>Hủy</Button>
-        </div>
-      ),
-    });
   };
 
   const loadDetailPeriod = async (id: number) => {
@@ -245,24 +253,18 @@ export default function RegistrationPeriodManagement() {
                 return (
                   <div
                     key={p.id}
-                    className={`relative rounded-xl bg-white p-4 shadow-sm hover:shadow-md transition-all border-2 ${CARD_STYLE[p.status] || CARD_STYLE.scheduled}`}
+                    className={`group relative rounded-2xl p-4 cursor-pointer transition-all duration-200 ${CARD_STYLE[p.status] || CARD_STYLE.scheduled}`}
                     onClick={() => loadDetailPeriod(p.id)}
                   >
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(p.id);
-                      }}
-                      className="absolute top-3 right-3 text-gray-300 hover:text-red-500 transition-colors"
-                    >
-                      <i className="fa-solid fa-trash-can text-sm" />
-                    </button>
-
-                    <h3 className="font-semibold text-gray-800 pr-6 mb-1 truncate">
-                      {p.name}
-                    </h3>
-
-                    <p className="text-sm text-gray-500 mb-3">{p.academic_year}</p>
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center ${CARD_ICON_STYLE[p.status] || CARD_ICON_STYLE.scheduled}`}>
+                        <i className={`${STATUS_ICON[p.status] || 'fa-solid fa-calendar'} text-sm`}></i>
+                      </span>
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-gray-800 text-sm truncate">{p.name}</h3>
+                        <p className="text-xs text-gray-500">{p.academic_year}</p>
+                      </div>
+                    </div>
 
                     <Badge variant={status.variant} dot>
                       {status.label}

@@ -1,5 +1,5 @@
 import { type ChangeEvent, useEffect, useState } from 'react';
-import { useModal, useUser, usePageHeader } from '../hooks';
+import { useModal, useUser, usePageHeader, useToast } from '../hooks';
 import { fetchWithAuth, updatePatchWithAuth, createWithAuth, updateWithAuth } from '../utils/ApiHelper';
 import { endpoints } from '../config/Apis';
 import Card from '../components/Ui/Card';
@@ -24,6 +24,7 @@ function effectiveStatusKey(reg: Registration): string {
 export default function ListStudentsAndRegistration() {
   const { openModal, closeModal } = useModal();
   const { user } = useUser();
+  const toast = useToast();
   const [registrationPeriods, setRegistrationPeriods] = useState<RegistrationPeriod[]>([]);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>('current');
   const [registrations, setRegistrations] = useState<Registration[]>([]);
@@ -91,8 +92,13 @@ export default function ListStudentsAndRegistration() {
     await updatePatchWithAuth(
       endpoints.approveRegistration(selectedPeriodId, id),
       {},
-      () => loadRegistrations(),
-      () => { },
+      () => {
+        loadRegistrations();
+        toast.success('Đã duyệt đăng ký', 'Đăng ký của sinh viên đã được duyệt.');
+      },
+      (type: string, msg: string) => {
+        toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
+      },
     );
   };
 
@@ -100,12 +106,17 @@ export default function ListStudentsAndRegistration() {
     await updatePatchWithAuth(
       endpoints.rejectRegistration(selectedPeriodId, id),
       {},
-      () => loadRegistrations(),
-      () => { },
+      () => {
+        loadRegistrations();
+        toast.success('Đã từ chối đăng ký', 'Đăng ký của sinh viên đã bị từ chối.');
+      },
+      (type: string, msg: string) => {
+        toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
+      },
     );
   };
 
-  const addLecturer = async (id: number) => {
+  const addLecturer = async (id: number, onSuccess?: () => void) => {
     await updatePatchWithAuth(
       endpoints.addLecturer(selectedPeriodId, id),
       { lecturer_id: Number(selectedLecturer) },
@@ -113,11 +124,10 @@ export default function ListStudentsAndRegistration() {
         loadRegistrations();
         setAssigningReg(null);
         setSelectedLecturer('');
+        onSuccess?.();
       },
-      (type: string, message: string, raw?: any) => {
-        console.log('Error type:', type);
-        console.log('Error message:', message);
-        console.log('Error raw:', raw);
+      (type: string, msg: string) => {
+        toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
       },
     );
   }
@@ -125,7 +135,10 @@ export default function ListStudentsAndRegistration() {
   const handleAssign = async () => {
     if (!assigningReg || !selectedLecturer) return;
     setAssignLoading(true);
-    await addLecturer(assigningReg.id);
+    const lecturer = lecturers.find((l) => String(l.id) === selectedLecturer);
+    await addLecturer(assigningReg.id, () => {
+      toast.success('Phân giảng viên thành công', `Đã phân giảng viên ${lecturer?.full_name || ''} cho sinh viên.`);
+    });
     setAssignLoading(false);
   };
 
@@ -294,10 +307,12 @@ export default function ListStudentsAndRegistration() {
   };
 
   const handleAddLecturers = async () => {
+    const ids = [...selectedIds];
     await Promise.all(
-      [...selectedIds].map((id) => addLecturer(id))
+      ids.map((id) => addLecturer(id))
     );
     loadRegistrations();
+    toast.success('Phân giảng viên thành công', `Đã phân giảng viên cho ${ids.length} sinh viên.`);
   };
 
   return (

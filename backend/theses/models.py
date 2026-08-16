@@ -429,11 +429,15 @@ class PeriodicReportSchedule(BaseModel):
         limit_choices_to={'role': User.Role.LECTURER},
         help_text='GVHD tạo lịch chung cho các SV mình hướng dẫn',
     )
-
+    registration_period = models.ForeignKey(
+        RegistrationPeriod,
+        on_delete=models.CASCADE,
+        related_name='report_schedules',
+    )
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['registration', 'sequence_number'],
+                fields=['lecturer', 'registration_period', 'sequence_number'],
                 name='unique_schedule_sequence_per_registration',
             ),
         ]
@@ -473,10 +477,6 @@ class Report(BaseModel):
 
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.SUBMITTED)
 
-    reviewed_by_lecturer = models.ForeignKey(
-        RegistrationLecturer, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='reviewed_reports',
-    )
     feedback = models.TextField(blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
 
@@ -496,10 +496,6 @@ class Report(BaseModel):
                 name='final_forbids_schedule',
             ),
             models.CheckConstraint(
-                condition=models.Q(reviewed_by_lecturer__isnull=True) | models.Q(report_type='periodic'),
-                name='reviewed_by_lecturer_only_for_periodic',
-            ),
-            models.CheckConstraint(
                 condition=(
                     models.Q(status__in=['submitted', 'late']) |
                     models.Q(reviewed_at__isnull=False)
@@ -510,11 +506,6 @@ class Report(BaseModel):
         ordering = ['registration', 'report_type', 'sequence_number']
 
     def clean(self):
-        # schedule phải khớp registration + report_type
-        if self.schedule_id:
-            if self.schedule.registration_id != self.registration_id:
-                raise ValidationError('schedule phải thuộc đúng registration của report này.')
-            self.sequence_number = self.schedule.sequence_number  # đồng bộ, không lệch
 
         # final: tự tăng sequence_number nếu chưa set
         if self.report_type == self.ReportType.FINAL and self.sequence_number is None:
@@ -522,12 +513,6 @@ class Report(BaseModel):
                 registration=self.registration, report_type=self.ReportType.FINAL,
             ).exclude(pk=self.pk).order_by('-sequence_number').first()
             self.sequence_number = (last.sequence_number + 1) if last else 1
-
-        if self.reviewed_by_lecturer_id:
-            if self.reviewed_by_lecturer.registration_id != self.registration_id:
-                raise ValidationError('Giảng viên review phải là GVHD được phân công cho đúng registration này.')
-            if self.reviewed_by_lecturer.role != RegistrationLecturer.Role.MAIN:
-                raise ValidationError('Chỉ GVHD chính thức (role=MAIN) mới được review báo cáo định kỳ.')
 
         if self.status == self.Status.REJECTED and not self.feedback.strip():
             raise ValidationError('Cần ghi rõ lý do khi yêu cầu nộp lại.')
@@ -545,8 +530,8 @@ class Committee(BaseModel):
     # ProjectRegistration đã chuyển thành ForeignKey khai báo bên ProjectRegistration
     # (field `committee`, related_name='registrations'), đúng kiểu 1-nhiều theo diagram.
 
-    faculty = models.ForeignKey(
-        Faculty,
+    registration_period = models.ForeignKey(
+        RegistrationPeriod,
         on_delete=models.CASCADE,
         related_name='committees',
     )
@@ -561,7 +546,7 @@ class Committee(BaseModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['faculty', 'name'],
+                fields=['registration_period', 'name'],
                 name='unique_committee_name_per_faculty',
             ),
         ]

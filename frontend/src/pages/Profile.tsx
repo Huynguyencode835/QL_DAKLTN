@@ -127,9 +127,6 @@ export default function Profile() {
                   {role.label}
                 </Badge>
               </div>
-              <Button variant="primary" icon="fa-regular fa-pen-to-square" className="self-start sm:self-auto">
-                Chỉnh sửa hồ sơ
-              </Button>
             </div>
           </div>
         </div>
@@ -157,7 +154,7 @@ export default function Profile() {
             data.role === 'lecturer' ? 'Thông tin giảng dạy' :
             'Thông tin công việc'
           }
-          icon={role.icon}
+          icon="fa-solid fa-briefcase"
           className="lg:col-span-3"
         >
           {isStudent ? (

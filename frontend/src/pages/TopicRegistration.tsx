@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useUser, useModal, usePageHeader } from '../hooks';
+import { useUser, useModal, usePageHeader, useToast } from '../hooks';
 import { fetchWithAuth, createWithAuth } from '../utils/ApiHelper';
 import { endpoints } from '../config/Apis';
 import { SectionCard } from '../components/Ui/Card';
@@ -15,6 +15,7 @@ import { DIFFICULTY_CONFIG } from '../types';
 export default function TopicRegistration() {
   const { user } = useUser();
   const { openModal, closeModal } = useModal();
+  const toast = useToast();
   const p = user?.profile || {};
   const [form, setForm] = useState({
     isThesis: 'false',
@@ -34,7 +35,6 @@ export default function TopicRegistration() {
   const [topics1, setTopics1] = useState<any[]>([]);
   const [topics2, setTopics2] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [submitResult, setSubmitResult] = useState<{ type: string; message: string } | null>(null);
   const [existingRegistration, setExistingRegistration] = useState<any | null>(null);
   const [loadingReg, setLoadingReg] = useState(true);
 
@@ -107,6 +107,7 @@ export default function TopicRegistration() {
       project_title: topic.title,
       project_description: topic.description,
     }));
+    toast.info('Đã chọn đề tài', topic.title);
   };
 
   const viewTopicDetail = (advisorId: string, topic: any, lecturer: any) => {
@@ -164,7 +165,6 @@ export default function TopicRegistration() {
 
   const handleSubmit = async (e: any) => {
     e.preventDefault();
-    setSubmitResult(null);
     setSubmitting(true);
 
     const body: any = {
@@ -180,8 +180,10 @@ export default function TopicRegistration() {
     await createWithAuth(
       endpoints.registrations("current"),
       body,
-      () => setSubmitResult({ type: 'success', message: 'Đăng ký thành công!' }),
-      (type: string, msg: string) => setSubmitResult({ type: 'error', message: msg }),
+      () => toast.success('Đăng ký thành công', 'Đơn đăng ký của bạn đã được gửi'),
+      (type: string, msg: string) => {
+        toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
+      },
       setSubmitting
     );
   };
@@ -350,15 +352,6 @@ export default function TopicRegistration() {
   return (
     <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
       <div className="max-w-4xl mx-auto w-full">
-        {submitResult && (
-          <div className={`mb-4 px-4 py-3 rounded-xl text-sm font-medium ${submitResult.type === 'success'
-            ? 'bg-green-50 border border-green-200 text-green-700'
-            : 'bg-red-50 border border-red-200 text-red-700'
-            }`}>
-            {submitResult.message}
-          </div>
-        )}
-
         <form className="space-y-8" onSubmit={handleSubmit}>
           <SectionCard title="Thông tin sinh viên" icon="fa-regular fa-user">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

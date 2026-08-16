@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { endpoints } from "../config/Apis";
 import axios from "axios";
-import { useUser } from "../hooks";
+import { useUser, useToast } from "../hooks";
 import { fetchWithAuth } from "../utils/ApiHelper";
 
 export default function LoginForm() {
   const navigate = useNavigate();
   const { setUser } = useUser();
+  const toast = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ username: "", password: "", captcha: "" });
   const [remember, setRemember] = useState(false);
@@ -29,8 +30,6 @@ export default function LoginForm() {
         grant_type: "password",
       };
 
-      console.log(body)
-
       const authUrl = import.meta.env.VITE_AUTH_URL || "http://127.0.0.1:8000";
       const res = await axios.post(
         `${authUrl}/o/token/`,
@@ -46,18 +45,15 @@ export default function LoginForm() {
 
         await fetchWithAuth(
           endpoints.profile,
-          (data: any) => setUser(data),
-          (onError: any) => alert(onError)
+          (data: any) => {
+            setUser(data);
+            toast.success('Đăng nhập thành công', `Chào mừng ${data.first_name || data.username || ''} quay lại!`);
+            navigate("/");
+          },
+          (onError: any) => toast.error('Lỗi', onError)
         );
-        navigate("/");
       }
     } catch (err: any) {
-      console.error("Login error:", err);
-      console.error("Error response:", err.response);
-      console.error("Error response data:", err.response?.data);
-      console.error("Error status:", err.response?.status);
-      console.error("Error message:", err.message);
-
       const message =
         err.response?.data?.detail ||
         err.response?.data?.error_description ||
@@ -65,8 +61,7 @@ export default function LoginForm() {
         err.message ||
         "Đăng nhập thất bại.";
 
-      alert(message);
-      console.log(message)
+      toast.error('Đăng nhập thất bại', message);
     } finally {
       setLoading(false);
     }
@@ -179,28 +174,6 @@ export default function LoginForm() {
               </button>
             </div>
           </form>
-
-          <div className="mt-8 pt-4 border-t border-gray-100 flex justify-center gap-4">
-            <a className="flex items-center gap-1.5 text-xs text-textMuted hover:text-primary transition-colors cursor-pointer" href="#">
-              <i className="fa-regular fa-headset text-xs"></i>
-              Hỗ trợ kỹ thuật
-            </a>
-            <span className="text-gray-300">|</span>
-            <a className="flex items-center gap-1.5 text-xs text-textMuted hover:text-primary transition-colors cursor-pointer" href="#">
-              <i className="fa-regular fa-circle-question text-xs"></i>
-              Trung tâm trợ giúp
-            </a>
-          </div>
-        </div>
-
-        <div className="text-center mt-5">
-          <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full border border-gray-200/60 shadow-[0_4px_12px_-4px_rgba(0,0,0,0.06)]">
-            <span className="relative flex w-2 h-2">
-              <span className="animate-ping absolute inline-flex w-full h-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex w-2 h-2 rounded-full bg-green-500"></span>
-            </span>
-            <span className="text-xs text-textMuted">Hệ thống hoạt động bình thường</span>
-          </div>
         </div>
       </main>
     </div>

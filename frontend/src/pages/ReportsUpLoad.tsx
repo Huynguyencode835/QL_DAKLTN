@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useUser, usePageHeader } from '../hooks';
+import { useUser, usePageHeader, useToast } from '../hooks';
 import { fetchWithAuth, createWithAuth } from '../utils/ApiHelper';
 import { endpoints } from '../config/Apis';
 import Card, { SectionCard } from '../components/Ui/Card';
@@ -54,13 +54,13 @@ function formatDate(iso: string | undefined | null): string {
 
 export default function ReportsUpLoad() {
   const { user } = useUser();
+  const toast = useToast();
   const [registration, setRegistration] = useState<any | null>(null);
   const [reports, setReports] = useState<any[]>([]);
   const [form, setForm] = useState({ ...emptyForm });
   const [loading, setLoading] = useState(true);
   const [loadingReports, setLoadingReports] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [submitResult, setSubmitResult] = useState<{ type: string; message: string } | null>(null);
 
   usePageHeader({
     title: 'Nộp báo cáo',
@@ -99,14 +99,13 @@ export default function ReportsUpLoad() {
 
   const handleSubmit = async (e: any) => {
     e.preventDefault();
-    setSubmitResult(null);
 
     if (!registration) {
-      setSubmitResult({ type: 'error', message: 'Bạn chưa có đăng ký đề tài nào để nộp báo cáo.' });
+      toast.error('Không thể nộp báo cáo', 'Bạn chưa có đăng ký đề tài nào để nộp báo cáo.');
       return;
     }
     if (!form.file) {
-      setSubmitResult({ type: 'error', message: 'Vui lòng chọn file báo cáo (PDF hoặc DOCX).' });
+      toast.error('Thiếu file', 'Vui lòng chọn file báo cáo (PDF hoặc DOCX).');
       return;
     }
 
@@ -125,7 +124,7 @@ export default function ReportsUpLoad() {
       endpoints.reports,
       body,
       () => {
-        setSubmitResult({ type: 'success', message: 'Nộp báo cáo thành công!' });
+        toast.success('Nộp báo cáo thành công', 'Báo cáo của bạn đã được gửi lên hệ thống.');
         setForm({ ...emptyForm });
         fetchWithAuth(
           endpoints.reports,
@@ -135,7 +134,9 @@ export default function ReportsUpLoad() {
           setLoadingReports,
         );
       },
-      (type: string, msg: string) => setSubmitResult({ type: 'error', message: msg }),
+      (type: string, msg: string) => {
+        toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
+      },
       setSubmitting,
     );
   };
@@ -146,7 +147,9 @@ export default function ReportsUpLoad() {
       (data: any) => {
         if (data?.url) window.open(data.url, '_blank');
       },
-      () => { },
+      (type: string, msg: string) => {
+        toast.error('Không thể tải file', msg);
+      },
     );
   };
 
@@ -160,13 +163,6 @@ export default function ReportsUpLoad() {
   const regStatus = REG_STATUS_CONFIG[registration?.status] || { label: registration?.status || '—', variant: 'neutral' as const };
   const regStatusVariant = regStatus.variant;
   const regStatusLabel = regStatus.label;
-
-  const reportStats = {
-    total: reports.length,
-    approved: reports.filter((r: any) => r.status === 'approved').length,
-    rejected: reports.filter((r: any) => r.status === 'rejected').length,
-    late: reports.filter((r: any) => r.status === 'late').length,
-  };
 
   if (loading) {
     return (
@@ -182,16 +178,6 @@ export default function ReportsUpLoad() {
   return (
     <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
       <div className="max-w-7xl mx-auto w-full space-y-6">
-        {submitResult && (
-          <div className={`px-4 py-3 rounded-xl text-sm font-medium ${
-            submitResult.type === 'success'
-              ? 'bg-green-50 border border-green-200 text-green-700'
-              : 'bg-red-50 border border-red-200 text-red-700'
-          }`}>
-            {submitResult.message}
-          </div>
-        )}
-
         {!registration ? (
           <Card
             variant="soft"
@@ -353,20 +339,6 @@ export default function ReportsUpLoad() {
                 <div className="pt-3 border-t border-gray-100">
                   <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Trạng thái đăng ký</p>
                   <Badge variant={regStatusVariant} dot>{regStatusLabel}</Badge>
-                </div>
-              </Card>
-
-              <Card
-                variant="soft"
-                title="Thống kê báo cáo"
-                icon="fa-regular fa-file-lines"
-                bodyClassName="!p-0"
-              >
-                <div className="grid grid-cols-2 gap-3">
-                  <StatBox icon="fa-solid fa-file-arrow-up" label="Đã nộp" value={reportStats.total} color="text-blue-500 bg-blue-50" />
-                  <StatBox icon="fa-solid fa-circle-check" label="Đã duyệt" value={reportStats.approved} color="text-emerald-500 bg-emerald-50" />
-                  <StatBox icon="fa-solid fa-rotate-left" label="Nộp lại" value={reportStats.rejected} color="text-red-500 bg-red-50" />
-                  <StatBox icon="fa-solid fa-clock" label="Nộp trễ" value={reportStats.late} color="text-amber-500 bg-amber-50" />
                 </div>
               </Card>
             </div>

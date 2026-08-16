@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useUser, usePageHeaderValue } from '../hooks';
+import { useUser, usePageHeaderValue, useToast } from '../hooks';
 import SidebarItem from '../components/Layout/SidebarItem';
 import Input from '../components/Ui/Input';
 import Button from '../components/Ui/Button';
@@ -45,6 +45,8 @@ const menuConfig: Record<string, any> = {
         { label: 'Đợt đồ án/khóa luận', icon: 'fa-chart-line', path: '/period' },
         { label: 'Quản lý danh sách sinh viên', icon: 'fa-users', path: '/students' },
         { label: 'Quản lý đăng ký đề tài', icon: 'fa-list-check', path: '/topic-management' },
+        { label: 'Quản lý báo cáo định kỳ', icon: 'fa-solid fa-calendar-days', path: '/report-schedule' },
+
       ],
     },
     {
@@ -130,6 +132,7 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const { user, logout, loading } = useUser();
   const { header } = usePageHeaderValue();
+  const toast = useToast();
 
   if (loading) {
     return (
@@ -201,7 +204,7 @@ export default function MainLayout() {
             <div className="flex items-center gap-1 shrink-0">
               {isLoggedIn && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); logout(); navigate('/login'); }}
+                  onClick={(e) => { e.stopPropagation(); logout(); toast.info('Đã đăng xuất'); navigate('/login'); }}
                   className="w-7 h-7 flex items-center justify-center rounded-lg text-white/40 hover:text-red-400 hover:bg-white/10 transition-all"
                   title="Đăng xuất"
                 >

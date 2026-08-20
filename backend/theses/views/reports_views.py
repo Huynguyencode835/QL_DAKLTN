@@ -15,13 +15,44 @@ from rest_framework.decorators import action
 from core.r2_client import get_r2_client, get_r2_bucket_name
 from theses.models import Report, RegistrationLecturer
 from theses.permissions import CanAccessReport, CanCreateReport
-from theses.serializeres.reportsSerializer import ReportUploadSerializer, ReportSerializer
+from theses.serializeres.reportsSerializer import (
+    ReportSerializer,
+    FinalReportUploadSerializer,
+)
+
+
+def upload_report_file(registration, data, now, type_label, seq_label):
+    file = data['file']
+    timestamp = int(now.timestamp())
+    file_key = (
+        f"reports/{registration.id}/{type_label}_"
+        f"{seq_label}_{timestamp}_{file.name}"
+    )
+
+    r2 = get_r2_client()
+    try:
+        r2.upload_fileobj(
+            file, get_r2_bucket_name(), file_key,
+            ExtraArgs={'ContentType': file.content_type},
+        )
+    except Exception as e:
+        return None, {'message': 'Upload thất bại', 'error': str(e)}
+
+    return file_key, None
+
+
+def create_report_or_cleanup(**report_kwargs):
+    file_key = report_kwargs['file_key']
+    try:
+        return Report.objects.create(**report_kwargs)
+    except DjangoValidationError as e:
+        get_r2_client().delete_object(Bucket=get_r2_bucket_name(), Key=file_key)
+        raise DRFValidationError(e.message_dict if hasattr(e, 'message_dict') else str(e))
 
 
 class ReportViewSet(
     viewsets.ViewSet,
     generics.ListAPIView,
-    generics.CreateAPIView,
     generics.RetrieveAPIView,
 ):
     permission_classes = [IsAuthenticated]
@@ -29,14 +60,11 @@ class ReportViewSet(
     queryset = Report.objects.select_related('registration').all()
 
     def get_permissions(self):
-        if self.action == 'create':
+        if self.action == 'upload_final':
             return [CanCreateReport()]
         return [CanAccessReport()]
-        
 
     def get_serializer_class(self):
-        if self.action == 'create':
-            return ReportUploadSerializer
         return ReportSerializer
 
     def get_queryset(self):
@@ -50,50 +78,43 @@ class ReportViewSet(
 
         return qs
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
+    @action(detail=False, methods=['post'], url_path='upload-final')
+    def upload_final(self, request, *args, **kwargs):
+        serializer = FinalReportUploadSerializer(
+            data=request.data, context={'request': request},
+        )
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-
-        registration = self._registration
+        registration = data['registration']
 
         period = registration.registration_period
         now = timezone.now()
         is_late = bool(period) and now > period.report_submission_end
 
-        # if now < period.report_submission_start:
-        #     raise DRFValidationError('Chưa đến thời gian nộp báo cáo')
+        if now < period.report_submission_start:
+            raise DRFValidationError('Chưa đến thời gian nộp báo cáo')
 
-        file = data['file']
-        timestamp = int(now.timestamp())
-        file_key = (
-            f"reports/{registration.id}/{data['report_type']}_"
-            f"{data.get('sequence_number') or 'final'}_{timestamp}_{file.name}"
+        file_key, err_resp = upload_report_file(
+            registration, data, now, 'final', 'final',
         )
+        if err_resp:
+            return Response(err_resp, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        r2 = get_r2_client()
-        try:
-            r2.upload_fileobj(
-                file, get_r2_bucket_name(), file_key,
-                ExtraArgs={'ContentType': file.content_type},
-            )
-        except Exception as e:
-            return Response({'message': 'Upload thất bại', 'error': str(e)}, status=500)
+        last = Report.objects.filter(
+            registration=registration, report_type=Report.ReportType.FINAL,
+        ).order_by('-sequence_number').first()
+        sequence_number = (last.sequence_number + 1) if last else 1
 
-        try:
-            report = Report.objects.create(
-                registration=registration,
-                report_type=data['report_type'],
-                sequence_number=data.get('sequence_number'),
-                title=data.get('title', ''),
-                file_key=file_key,
-                file_name=file.name,
-                file_size=file.size,
-                status=Report.Status.LATE if is_late else Report.Status.SUBMITTED,
-            )
-        except DjangoValidationError as e:
-            r2.delete_object(Bucket=get_r2_bucket_name(), Key=file_key)
-            raise DRFValidationError(e.message_dict if hasattr(e, 'message_dict') else str(e))
+        report = create_report_or_cleanup(
+            registration=registration,
+            report_type=Report.ReportType.FINAL,
+            sequence_number=sequence_number,
+            title=data.get('title', ''),
+            file_key=file_key,
+            file_name=data['file'].name,
+            file_size=data['file'].size,
+            status=Report.Status.LATE if is_late else Report.Status.SUBMITTED,
+        )
 
         return Response(ReportSerializer(report).data, status=status.HTTP_201_CREATED)
 

@@ -169,7 +169,7 @@ class IsSupervisingLecturerForRegistration(IsAuthenticated):
             return False
         if not registration.lecturer_assignments.filter(
             lecturer=request.user,
-            role__in=[RegistrationLecturer.Role.OPTION1, RegistrationLecturer.Role.OPTION2],
+            role=RegistrationLecturer.Role.PREFERENCE,
         ).exists():
             return False
         view._registration = registration
@@ -244,26 +244,11 @@ class CanAccessReport(IsAuthenticated):
 
 
 class CanCreateReport(IsAuthenticated):
-    """Chỉ SV chủ sở hữu đăng ký mới được nộp báo cáo."""
+    """Chỉ sinh viên mới được nộp báo cáo."""
 
     def has_permission(self, request, view):
         if not super().has_permission(request, view):
             return False
         if request.user.role != User.Role.STUDENT:
             raise PermissionDenied('Chỉ sinh viên mới được nộp báo cáo')
-
-        registration_id = request.data.get('registration_id')
-        if not registration_id:
-            raise ValidationError('Thiếu tham số registration_id')
-
-        try:
-            registration = ProjectRegistration.objects.select_related(
-                'registration_period').get(id=registration_id)
-        except (ProjectRegistration.DoesNotExist, ValueError, TypeError):
-            raise NotFound('Không tìm thấy đăng ký đề tài')
-
-        if registration.student_id != request.user.id:
-            raise PermissionDenied('Bạn không có quyền nộp báo cáo cho đăng ký này')
-
-        view._registration = registration
         return True

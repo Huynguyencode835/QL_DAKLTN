@@ -8,6 +8,7 @@ router.register('lecturers', views.LecturerViewSet, basename='lecturer')
 router.register('registration-periods', views.RegistrationPeriodViewSet, basename='registration-period')
 router.register('specialization', views.SpecializationViewSet, basename='specialization')
 router.register('reports', views.ReportViewSet, basename='seports')
+router.register('schedules', views.ScheduleViewSet, basename='schedule')
 
 
 urlpatterns = [

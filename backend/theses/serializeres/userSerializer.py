@@ -1,8 +1,9 @@
 from rest_framework import serializers
 from theses.models import (
     User, Faculty, Major, Specialization,
-    StudentProfile, LecturerProfile, StaffProfile, AcademicDegree, RegistrationLecturer, RegistrationPeriod, Specialization
+    StudentProfile, LecturerProfile, StaffProfile, AcademicDegree, Specialization
 )
+from theses.services import get_lecturer_remaining_slots
 from theses.validators import validate_range
 
 
@@ -63,13 +64,7 @@ class LecturerProfileSerializer(serializers.ModelSerializer):
         fields = ['academic_degree', 'position', 'specializations', 'remaining_slots']
 
     def get_remaining_slots(self, obj):
-        current_count = RegistrationLecturer.objects.filter(
-            lecturer=obj.user,
-            role=RegistrationLecturer.Role.MAIN,
-            approval_status=RegistrationLecturer.ApprovalStatus.APPROVED,
-            registration__registration_period__status__in=RegistrationPeriod.OPEN_STATUSES,
-        ).count()
-        return max(obj.academic_degree.max_students_quota - current_count, 0)
+        return max(get_lecturer_remaining_slots(obj.user), 0)
 
 
 class StaffProfileSerializer(serializers.ModelSerializer):
@@ -111,11 +106,10 @@ class UserProfileSerializer(UserSerializer):
 
 class LecturerBasicSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
-    faculty = FacultySerializer(read_only=True)
 
     class Meta:
         model = User
-        fields = ['id', 'full_name', 'faculty', 'avatar']
+        fields = ['id', 'full_name', 'avatar']
 
     def get_full_name(self, obj):
         return f"{obj.last_name} {obj.first_name}".strip()

@@ -5,6 +5,9 @@ from rest_framework.exceptions import NotFound
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from django.db import IntegrityError, transaction
+from rest_framework import serializers
+
 
 from theses.models import User, ProjectRegistration, RegistrationPeriod, RegistrationLecturer
 from theses.permissions import (
@@ -14,6 +17,7 @@ from theses.permissions import (
     CanAccessRegistration,
 )
 from theses.serializeres import projectRegistrationSerializer, registrationPeriodSerializer
+from theses.services import _reevaluate_main_candidate, get_lecturer_remaining_slots
 
 
 class RegistrationPeriodViewSet(viewsets.ViewSet,
@@ -41,6 +45,8 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
         if self.action in ('registration_detail', 'approve_registration',
                         'reject_registration', 'add_lecturer_to_registration'):
             return [IsRegistrationOwnerOrStaff()]
+        if self.action == 'list':
+            return [IsLecturerOrStaff()]
         return [IsAuthenticated()]
 
 
@@ -76,6 +82,11 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
         specialization_id = self.request.query_params.get('specialization')
         if specialization_id:
             qs = qs.filter(specialization_id=specialization_id)
+
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+
         return qs
 
     def _check_in_student_registration_window(self, period):
@@ -141,71 +152,41 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
         permission_classes=[IsSupervisingLecturerForRegistration],
     )
     def approve_registration(self, request, pk=None, registration_pk=None):
-        registration = get_object_or_404(
-            ProjectRegistration.objects.select_related('registration_period').prefetch_related('lecturer_assignments'),
-            pk=registration_pk,
-        )
-        self.check_object_permissions(request, registration)
-
-        err = self._check_in_student_registration_window(registration.registration_period)
-        if err:
-            return Response({'detail': err}, status=status.HTTP_400_BAD_REQUEST)
-
-        serializer = projectRegistrationSerializer.ApproveRegistrationSerializer(
-            data=request.data,
-            context={'registration': registration, 'request': request}
-        )
-        serializer.is_valid(raise_exception=True)
-        assignment = serializer.validated_data['assignment']
-        now = timezone.now()
-
-        assignments = {
-            a.role: a
-            for a in registration.lecturer_assignments.all()
-            if a.role in (
-                RegistrationLecturer.Role.OPTION1,
-                RegistrationLecturer.Role.OPTION2, 
+        with transaction.atomic():
+            registration = get_object_or_404(
+                ProjectRegistration.objects.select_for_update(of=('self',)).select_related('registration_period'),
+                pk=registration_pk,
             )
-        }
-        option1 = assignments.get(RegistrationLecturer.Role.OPTION1)
-        option2 = assignments.get(RegistrationLecturer.Role.OPTION2)
+            self.check_object_permissions(request, registration)
 
-        if assignment.role == RegistrationLecturer.Role.OPTION1:
-            # OPTION1 đồng ý -> trở thành GVHD chính thức (MAIN)
-            assignment.role = RegistrationLecturer.Role.MAIN
+            err = self._check_in_student_registration_window(registration.registration_period)
+            if err:
+                return Response({'detail': err}, status=status.HTTP_400_BAD_REQUEST)
+
+            serializer = projectRegistrationSerializer.ApproveRegistrationSerializer(
+                data=request.data,
+                context={'registration': registration, 'request': request}
+            )
+            serializer.is_valid(raise_exception=True)
+            assignment = serializer.validated_data['assignment']
+
+            if assignment.approval_status != RegistrationLecturer.ApprovalStatus.PENDING:
+                return Response(
+                    {'detail': 'Nguyện vọng này không còn ở trạng thái chờ duyệt.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if get_lecturer_remaining_slots(assignment.lecturer) <= 0:
+                return Response(
+                    {'detail': 'Giảng viên đã hết chỉ tiêu hướng dẫn trong đợt đăng ký hiện tại.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             assignment.approval_status = RegistrationLecturer.ApprovalStatus.APPROVED
-            assignment.responded_at = now
+            assignment.responded_at = timezone.now()
             assignment.save()
 
-            # OPTION2 nếu vẫn chưa ra quyết định (PENDING/APPROVED đang chờ) -> SKIPPED
-            if option2 and option2.approval_status in (
-                RegistrationLecturer.ApprovalStatus.PENDING,
-                RegistrationLecturer.ApprovalStatus.APPROVED,
-            ):
-                option2.approval_status = RegistrationLecturer.ApprovalStatus.SKIPPED
-                option2.save()
-
-            registration.status = ProjectRegistration.STATUS.ASSIGNED_LECTURER_AND_PENDING
-            registration.save()
-
-        elif assignment.role == RegistrationLecturer.Role.OPTION2:
-            # OPTION2 đồng ý: chỉ ghi nhận, đợi OPTION1 quyết định
-            assignment.approval_status = RegistrationLecturer.ApprovalStatus.APPROVED
-            assignment.responded_at = now
-            assignment.save()
-
-            if option1 is None or option1.approval_status == RegistrationLecturer.ApprovalStatus.REJECTED:
-                # OPTION1 không còn (hoặc đã từ chối) -> OPTION2 thành MAIN
-                assignment.role = RegistrationLecturer.Role.MAIN
-                assignment.save(update_fields=['role'])
-
-                registration.status = ProjectRegistration.STATUS.ASSIGNED_LECTURER_AND_PENDING
-                registration.save()
-            elif option1.approval_status == RegistrationLecturer.ApprovalStatus.APPROVED:
-                # OPTION1 đã đồng ý và trở thành MAIN -> OPTION2 bị bỏ qua
-                assignment.approval_status = RegistrationLecturer.ApprovalStatus.SKIPPED
-                assignment.save()
-            # else: OPTION1 vẫn PENDING -> giữ nguyên, chờ OPTION1
+            _reevaluate_main_candidate(registration)
 
         s = projectRegistrationSerializer.ProjectRegistrationDetailSerializer(
             registration, context={'request': request},
@@ -219,53 +200,36 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
         permission_classes=[IsSupervisingLecturerForRegistration],
     )
     def reject_registration(self, request, pk=None, registration_pk=None):
-        registration = get_object_or_404(
-            ProjectRegistration.objects.select_related('registration_period').prefetch_related('lecturer_assignments'),
-            pk=registration_pk,
-        )
-        self.check_object_permissions(request, registration)
-
-        err = self._check_in_student_registration_window(registration.registration_period)
-        if err:
-            return Response({'detail': err}, status=status.HTTP_400_BAD_REQUEST)
-
-        serializer = projectRegistrationSerializer.RejectRegistrationSerializer(
-            data=request.data,
-            context={'registration': registration, 'request': request}
-        )
-        serializer.is_valid(raise_exception=True)
-        assignment = serializer.validated_data['assignment']
-
-        assignment.approval_status = RegistrationLecturer.ApprovalStatus.REJECTED
-        assignment.responded_at = timezone.now()
-        assignment.note = serializer.validated_data.get('note', '')
-        assignment.save()
-
-        assignments = {
-            a.role: a
-            for a in registration.lecturer_assignments.all()
-            if a.role in (
-                RegistrationLecturer.Role.OPTION1,
-                RegistrationLecturer.Role.OPTION2,
+        with transaction.atomic():
+            registration = get_object_or_404(
+                ProjectRegistration.objects.select_for_update(of=('self',)).select_related('registration_period'),
+                pk=registration_pk,
             )
-        }
-        option1 = assignments.get(RegistrationLecturer.Role.OPTION1)
-        option2 = assignments.get(RegistrationLecturer.Role.OPTION2)
+            self.check_object_permissions(request, registration)
 
-        if assignment.role == RegistrationLecturer.Role.OPTION1:
-            # OPTION1 từ chối: nếu OPTION2 đã đồng ý -> OPTION2 thành MAIN
-            if option2 and option2.approval_status == RegistrationLecturer.ApprovalStatus.APPROVED:
-                option2.role = RegistrationLecturer.Role.MAIN
-                option2.save(update_fields=['role'])
+            err = self._check_in_student_registration_window(registration.registration_period)
+            if err:
+                return Response({'detail': err}, status=status.HTTP_400_BAD_REQUEST)
 
-                registration.status = ProjectRegistration.STATUS.ASSIGNED_LECTURER_AND_PENDING
-                registration.save()
-            # else: OPTION2 PENDING -> đợi; OPTION2 REJECTED -> cả 2 từ chối, chờ giáo vụ phân
+            serializer = projectRegistrationSerializer.RejectRegistrationSerializer(
+                data=request.data,
+                context={'registration': registration, 'request': request}
+            )
+            serializer.is_valid(raise_exception=True)
+            assignment = serializer.validated_data['assignment']
 
-        elif assignment.role == RegistrationLecturer.Role.OPTION2:
-            # OPTION2 từ chối: nếu OPTION1 đã đồng ý (MAIN) thì không cần làm gì thêm;
-            # nếu OPTION1 REJECTED -> cả 2 từ chối, chờ giáo vụ phân; PENDING -> đợi.
-            pass
+            if assignment.approval_status != RegistrationLecturer.ApprovalStatus.PENDING:
+                return Response(
+                    {'detail': 'Nguyện vọng này không còn ở trạng thái chờ duyệt.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            assignment.approval_status = RegistrationLecturer.ApprovalStatus.REJECTED
+            assignment.responded_at = timezone.now()
+            assignment.note = serializer.validated_data.get('note', '')
+            assignment.save()
+
+            _reevaluate_main_candidate(registration)
 
         s = projectRegistrationSerializer.ProjectRegistrationDetailSerializer(
             registration, context={'request': request},
@@ -278,40 +242,51 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
         permission_classes=[IsStaffSameFacultyForRegistration],
     )
     def add_lecturer_to_registration(self, request, pk=None, registration_pk=None):
-        registration = get_object_or_404(
-            ProjectRegistration.objects.select_related('student', 'student__faculty', 'registration_period'),
-            pk=registration_pk,
-        )
-        self.check_object_permissions(request, registration)
+        with transaction.atomic():
+            registration = get_object_or_404(
+                ProjectRegistration.objects.select_for_update(of=('self',)).select_related(
+                    'student', 'student__faculty', 'registration_period',
+                ),
+                pk=registration_pk,
+            )
+            self.check_object_permissions(request, registration)
 
-        err = self._check_in_student_registration_window(registration.registration_period)
-        if err:
-            return Response({'detail': err}, status=status.HTTP_400_BAD_REQUEST)
+            err = self._check_in_student_registration_window(registration.registration_period)
+            if err:
+                return Response({'detail': err}, status=status.HTTP_400_BAD_REQUEST)
 
+            serializer = projectRegistrationSerializer.AddLecturerSerializer(
+                data=request.data,
+                context={'registration': registration}
+            )
+            serializer.is_valid(raise_exception=True)
+            lecturer = serializer.validated_data['lecturer_id']
 
-        serializer = projectRegistrationSerializer.AddLecturerSerializer(
-            data=request.data,
-            context={'registration': registration}
-        )
-        serializer.is_valid(raise_exception=True)
-        lecturer = serializer.validated_data['lecturer_id']
+            if get_lecturer_remaining_slots(lecturer) <= 0:
+                return Response(
+                    {'detail': 'Giảng viên đã hết chỉ tiêu hướng dẫn trong đợt đăng ký hiện tại.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-        RegistrationLecturer.objects.create(
-            registration=registration,
-            lecturer=lecturer,
-            role=RegistrationLecturer.Role.MAIN,
-            approval_status=RegistrationLecturer.ApprovalStatus.APPROVED,
-            responded_at=timezone.now(),
-        )
+            RegistrationLecturer.objects.create(
+                registration=registration,
+                lecturer=lecturer,
+                role=RegistrationLecturer.Role.MAIN,
+                approval_status=RegistrationLecturer.ApprovalStatus.APPROVED,
+                responded_at=timezone.now(),
+            )
 
-        # Các nguyện vọng (OPTION1/OPTION2) còn đang chờ duyệt -> không cần duyệt nữa
-        registration.lecturer_assignments.filter(
-            role__in=[RegistrationLecturer.Role.OPTION1, RegistrationLecturer.Role.OPTION2],
-            approval_status=RegistrationLecturer.ApprovalStatus.PENDING,
-        ).update(approval_status=RegistrationLecturer.ApprovalStatus.SKIPPED)
+            # Các nguyện vọng (PREFERENCE) còn đang chờ duyệt -> không cần duyệt nữa
+            pending_preferences = registration.lecturer_assignments.filter(
+                role=RegistrationLecturer.Role.PREFERENCE,
+                approval_status=RegistrationLecturer.ApprovalStatus.PENDING,
+            ).select_for_update()
+            for assignment in pending_preferences:
+                assignment.approval_status = RegistrationLecturer.ApprovalStatus.SKIPPED
+                assignment.save(update_fields=['approval_status', 'updated_date'])
 
-        registration.status = ProjectRegistration.STATUS.ASSIGNED_LECTURER_AND_PENDING
-        registration.save()
+            registration.status = ProjectRegistration.STATUS.ASSIGNED_LECTURER_AND_PENDING
+            registration.save()
 
         s = projectRegistrationSerializer.ProjectRegistrationDetailSerializer(
             registration, context={'request': request},

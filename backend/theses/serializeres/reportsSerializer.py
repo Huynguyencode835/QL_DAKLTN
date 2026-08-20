@@ -1,6 +1,9 @@
 # reports/serializers.py
+from django.utils import timezone
 from rest_framework import serializers
-from theses.models import Report
+from theses.models import (
+    Report, ProjectRegistration, RegistrationPeriod,
+)
 
 ALLOWED_TYPES = [
     'application/pdf',
@@ -17,10 +20,7 @@ class ReportSerializer(serializers.ModelSerializer):
             'feedback', 'reviewed_at', 'created_date',
         ]
 
-class ReportUploadSerializer(serializers.Serializer):
-    registration_id = serializers.IntegerField()
-    report_type = serializers.ChoiceField(choices=Report.ReportType.choices)
-    sequence_number = serializers.IntegerField(required=False, allow_null=True)
+class BaseReportUploadSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=255, required=False, allow_blank=True)
     file = serializers.FileField()
 
@@ -31,17 +31,42 @@ class ReportUploadSerializer(serializers.Serializer):
             raise serializers.ValidationError('File vượt quá 10MB')
         return file
 
+class PeriodicReportUploadSerializer(BaseReportUploadSerializer):
     def validate(self, data):
-        # periodic bắt buộc có sequence_number, final thì không
-        report_type = data.get('report_type')
-        seq = data.get('sequence_number')
+        user = self.context['request'].user
+        schedule = self.context['schedule']
 
-        if report_type == Report.ReportType.PERIODIC and seq is None:
+        registration = schedule.registrations.filter(
+            student=user, active=True,
+        ).first()
+        if not registration:
             raise serializers.ValidationError(
-                {'sequence_number': 'Báo cáo định kỳ cần có số thứ tự'}
+                {'schedule': 'Bạn không có đăng ký đề tài trong đợt của lịch báo cáo này.'}
             )
-        if report_type == Report.ReportType.FINAL and seq is not None:
+
+        # if timezone.now() > schedule.deadline:
+        #     raise serializers.ValidationError(
+        #         {'deadline': 'Đã quá hạn nộp cho lịch báo cáo này.'}
+        #     )
+
+        data['schedule'] = schedule
+        data['registration'] = registration
+        return data
+
+class FinalReportUploadSerializer(BaseReportUploadSerializer):
+    def validate(self, data):
+        user = self.context['request'].user
+
+        registration = ProjectRegistration.objects.filter(
+            student=user, active=True,
+            registration_period__status__in=RegistrationPeriod.OPEN_STATUSES,
+        ).select_related('registration_period').order_by(
+            '-registration_period__student_registration_start',
+        ).first()
+        if not registration:
             raise serializers.ValidationError(
-                {'sequence_number': 'Báo cáo cuối kỳ không cần số thứ tự'}
+                {'registration': 'Bạn chưa có đăng ký đề tài trong đợt đang mở.'}
             )
+
+        data['registration'] = registration
         return data

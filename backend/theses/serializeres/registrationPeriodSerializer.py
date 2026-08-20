@@ -1,5 +1,5 @@
 from rest_framework import serializers
-
+from django.utils import timezone
 from theses.models import Faculty, RegistrationPeriod
 from theses.validators import (
     validate_non_blank,
@@ -21,11 +21,30 @@ class RegistrationPeriodSerializer(serializers.ModelSerializer):
     faculty = serializers.PrimaryKeyRelatedField(
         queryset=Faculty.objects.all(), write_only=True, required=False,
     )
+    student_registration_end = serializers.DateTimeField(read_only=True)
+    report_submission_start = serializers.DateTimeField(read_only=True)
+    report_submission_end = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = RegistrationPeriod
-        fields = '__all__'
-        read_only_fields = ['id', 'created_by', 'created_date', 'updated_date', 'active']
+        fields = [
+            'id',
+            'name',
+            'academic_year',
+            'student_registration_start',
+            'student_registration_days',
+            'student_registration_end',
+            'execution_duration_weeks',
+            'report_submission_start',
+            'report_submission_days',
+            'report_submission_end',
+            'status',
+            'faculty',
+            'created_by',
+            'created_date',
+            'active',
+        ]
+        read_only_fields = ['id', 'created_by', 'created_date', 'active']
 
     def validate_name(self, value):
         value = validate_non_blank(value, 'Tên đợt')
@@ -39,29 +58,55 @@ class RegistrationPeriodSerializer(serializers.ModelSerializer):
         return validate_range(value, 'Thời gian thực hiện đồ án', min_value=1, max_value=52)
 
     def validate(self, attrs):
+        def get_value(field):
+            if field in attrs:
+                return attrs[field]
+            if self.instance:
+                return getattr(self.instance, field)
+            return None
+
+        start = get_value('student_registration_start')
+        reg_days = get_value('student_registration_days')
+        exec_weeks = get_value('execution_duration_weeks')
+        report_days = get_value('report_submission_days')
+
+        if start and reg_days is not None:
+            registration_end = start + timezone.timedelta(days=reg_days)
+        else:
+            registration_end = None
+
+        if registration_end and exec_weeks is not None:
+            report_start = registration_end + timezone.timedelta(weeks=exec_weeks)
+        else:
+            report_start = None
+
+        if report_start and report_days is not None:
+            report_end = report_start + timezone.timedelta(days=report_days)
+        else:
+            report_end = None
+
         validate_datetime_before(
-            attrs.get('student_registration_start'),
-            attrs.get('student_registration_end'),
+            start, registration_end,
             'Thời gian bắt đầu đăng ký', 'thời gian kết thúc đăng ký',
         )
         validate_datetime_before(
-            attrs.get('report_submission_start'),
-            attrs.get('report_submission_end'),
+            report_start, report_end,
             'Thời gian bắt đầu nộp báo cáo', 'thời gian kết thúc nộp báo cáo',
         )
         validate_datetime_before(
-            attrs.get('student_registration_end'),
-            attrs.get('report_submission_start'),
+            registration_end, report_start,
             'Thời gian kết thúc đăng ký', 'thời gian bắt đầu nộp báo cáo',
         )
 
         status = attrs.get('status')
         if status in RegistrationPeriod.OPEN_STATUSES:
-            faculty = attrs.get('faculty')
-            if not faculty:
-                request = self.context.get('request')
-                if request and request.user.is_authenticated:
-                    faculty = request.user.faculty
+            request = self.context.get('request')
+
+            if self.instance:
+                faculty = self.instance.faculty
+            else:
+                faculty = request.user.faculty if request and request.user.is_authenticated else None
+
             if faculty:
                 conflicting = RegistrationPeriod.objects.filter(
                     active=True,

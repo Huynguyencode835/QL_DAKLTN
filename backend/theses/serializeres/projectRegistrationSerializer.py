@@ -2,11 +2,13 @@ from rest_framework import serializers
 from theses.models import ProjectRegistration, RegistrationLecturer, Specialization, User
 from theses.serializeres.userSerializer import SpecializationSerializer
 from theses.validators import validate_non_blank
-
+from theses.services import get_lecturer_remaining_slots
 
 class SpecializationNestedField(serializers.PrimaryKeyRelatedField):
     """Nhận pk khi ghi (vd: 2), trả nested object khi đọc."""
-
+    def use_pk_only_optimization(self):
+        return False
+    
     def to_representation(self, value):
         return SpecializationSerializer(value).data
 
@@ -27,6 +29,12 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
     note1 = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
     note2 = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
 
+    # Các field chỉ dành riêng cho Lecturer/Staff xem dạng list
+    LECTURER_STAFF_LIST_FIELDS = (
+        'id', 'student_id', 'student_name', 'project_title',
+        'status', 'lecturer_name',
+    )
+
     class Meta:
         model = ProjectRegistration
         fields = [
@@ -42,6 +50,27 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'project_title': {'max_length': 255},
         }
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+
+        # Student xem: giữ nguyên đầy đủ như cũ
+        if not user or not user.is_authenticated:
+            return data
+        if user.role == User.Role.STUDENT:
+            return data
+
+        # Lecturer / Staff xem dạng list: chỉ trả về field cần thiết
+        if user.role in (User.Role.LECTURER, User.Role.STAFF):
+            return {
+                key: value for key, value in data.items()
+                if key in self.LECTURER_STAFF_LIST_FIELDS
+            }
+
+        return data
 
     def get_avatar(self, obj):
         if obj.student.avatar:
@@ -59,6 +88,7 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
         return f"{obj.student.last_name} {obj.student.first_name}".strip()
 
     def get_lecturer_name(self, obj):
+        # "GV chính thức" — lấy giảng viên có role MAIN
         main = obj.lecturer_assignments.filter(
             role=RegistrationLecturer.Role.MAIN,
         ).first()
@@ -74,6 +104,7 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
                 'lecturer': a.lecturer_id,
                 'lecturer_name': f"{a.lecturer.last_name} {a.lecturer.first_name}".strip(),
                 'role': a.role,
+                'priority': a.priority,
                 'approval_status': a.approval_status,
                 'note': a.note,
             }
@@ -84,21 +115,28 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
         return validate_non_blank(value, 'Project title')
 
     def validate_project_description(self, value):
-        return validate_non_blank(value, 'Project description')
+        return  (value, 'Project description')
+
+    def _validate_advisor(self, value):
+        if value is None:
+            return value
+
+        lecturer = User.objects.filter(pk=value, role=User.Role.LECTURER).first()
+        if lecturer is None:
+            raise serializers.ValidationError('Giảng viên không tồn tại.')
+
+        if get_lecturer_remaining_slots(lecturer) <= 0:
+            raise serializers.ValidationError(
+                'Giảng viên đã hết chỉ tiêu hướng dẫn trong đợt đăng ký hiện tại.'
+            )
+
+        return value
 
     def validate_advisor1(self, value):
-        if value is None:
-            return value
-        if not User.objects.filter(pk=value, role=User.Role.LECTURER).exists():
-            raise serializers.ValidationError('Giảng viên không tồn tại.')
-        return value
+        return self._validate_advisor(value)
 
     def validate_advisor2(self, value):
-        if value is None:
-            return value
-        if not User.objects.filter(pk=value, role=User.Role.LECTURER).exists():
-            raise serializers.ValidationError('Giảng viên không tồn tại.')
-        return value
+        return self._validate_advisor(value)
 
     def validate(self, attrs):
         request = self.context.get('request')
@@ -121,6 +159,12 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
 
             a1 = attrs.get('advisor1')
             a2 = attrs.get('advisor2')
+            wants_upgrade = attrs.get('wants_thesis_upgrade', False)
+            if (a1 is not None or a2 is not None) and not wants_upgrade:
+                raise serializers.ValidationError(
+                    'Chỉ khi chọn nâng cấp lên khóa luận (wants_thesis_upgrade=True) '
+                    'mới được chọn giảng viên hướng dẫn.'
+                )
             if a1 is not None and a2 is not None and a1 == a2:
                 raise serializers.ValidationError('Giảng viên nguyện vọng 1 và 2 không được trùng nhau.')
             if a2 is not None and a1 is None:
@@ -155,7 +199,8 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
             RegistrationLecturer.objects.create(
                 registration=registration,
                 lecturer_id=advisor1,
-                role=RegistrationLecturer.Role.OPTION1,
+                role=RegistrationLecturer.Role.PREFERENCE,
+                priority=1,
                 approval_status=RegistrationLecturer.ApprovalStatus.PENDING,
                 note=note1,
             )
@@ -163,7 +208,8 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
             RegistrationLecturer.objects.create(
                 registration=registration,
                 lecturer_id=advisor2,
-                role=RegistrationLecturer.Role.OPTION2,
+                role=RegistrationLecturer.Role.PREFERENCE,
+                priority=2,
                 approval_status=RegistrationLecturer.ApprovalStatus.PENDING,
                 note=note2,
             )
@@ -182,6 +228,9 @@ class ProjectRegistrationDetailSerializer(ProjectRegistrationSerializer):
             'student_info', 'lecturer_info', 'status_display',
         ]
         read_only_fields = ProjectRegistrationSerializer.Meta.fields
+
+    def to_representation(self, instance):
+        return serializers.ModelSerializer.to_representation(self, instance)
 
     def get_student_info(self, obj):
         user = obj.student
@@ -237,7 +286,7 @@ class BaseRegistrationApprovalSerializer(serializers.Serializer):
             raise serializers.ValidationError('Không xác định được người duyệt.')
         assignment = registration.lecturer_assignments.filter(
             lecturer=request.user,
-            role__in=[RegistrationLecturer.Role.OPTION1, RegistrationLecturer.Role.OPTION2],
+            role=RegistrationLecturer.Role.PREFERENCE,
             approval_status=RegistrationLecturer.ApprovalStatus.PENDING,
         ).first()
         if not assignment:

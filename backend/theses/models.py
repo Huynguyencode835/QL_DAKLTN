@@ -263,7 +263,8 @@ class RegistrationPeriod(BaseModel):
         constraints = [
             models.UniqueConstraint(
                 fields=['faculty'],
-                condition=models.Q(status__in=[
+                condition=models.Q(
+                    active=True,status__in=[
                     'scheduled', 'student_registration', 'in_progress', 'report_submission',
                 ]),
                 name='unique_open_registration_period_per_faculty',
@@ -306,6 +307,7 @@ class ProjectRegistration(BaseModel):
     class STATUS(models.TextChoices):
         WAITING_LECTURER_AND_PENDING = 'waiting_lecturer', 'Chờ phân giảng viên hướng dẫn'
         ASSIGNED_LECTURER_AND_PENDING = 'assigned_lecturer', 'Đã phân giảng viên hướng dẫn'
+        WAITING_STAFF_ASSIGNMENT = 'waiting_staff_assignment', 'Các nguyện vọng bị từ chối, chờ giáo vụ phân công'
 
     status = models.CharField(max_length=50, default=STATUS.WAITING_LECTURER_AND_PENDING, choices=STATUS.choices)
     wants_thesis_upgrade = models.BooleanField(default=False)
@@ -361,8 +363,7 @@ class ProjectRegistration(BaseModel):
 class RegistrationLecturer(BaseModel):
     class Role(models.TextChoices):
         MAIN = 'main', 'Chính thức'
-        OPTION1 = 'option1', 'Tùy chọn 1'
-        OPTION2 = 'option2', 'Tùy chọn 2'
+        PREFERENCE = 'preference', 'Nguyện vọng'
         REVIEWER = 'reviewer', 'Phản biện'
 
     class ApprovalStatus(models.TextChoices):
@@ -383,6 +384,10 @@ class RegistrationLecturer(BaseModel):
         limit_choices_to={'role': User.Role.LECTURER}
     )
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.MAIN)
+    priority = models.PositiveSmallIntegerField(
+        default=0,
+        help_text='Thứ tự ưu tiên trong các nguyện vọng của cùng 1 registration. Số nhỏ hơn = ưu tiên cao hơn.',
+    )
     approval_status = models.CharField(
         max_length=20, choices=ApprovalStatus.choices, default=ApprovalStatus.PENDING
     )
@@ -395,8 +400,9 @@ class RegistrationLecturer(BaseModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['registration', 'role'],
-                name='unique_role_per_registration',
+                fields=['registration', 'priority'],
+                condition=models.Q(role='preference'),
+                name='unique_priority_per_registration_preference',
             ),
             models.UniqueConstraint(
                 fields=['registration', 'lecturer'],
@@ -441,6 +447,13 @@ class PeriodicReportSchedule(BaseModel):
                 name='unique_schedule_sequence_per_registration',
             ),
         ]
+
+    def clean(self):
+        if self.sequence_number is None:
+            last = PeriodicReportSchedule.objects.filter(
+                lecturer=self.lecturer, registration_period=self.registration_period,
+            ).exclude(pk=self.pk).order_by('-sequence_number').first()
+            self.sequence_number = (last.sequence_number + 1) if last else 1
 
 class Report(BaseModel):
     class ReportType(models.TextChoices):

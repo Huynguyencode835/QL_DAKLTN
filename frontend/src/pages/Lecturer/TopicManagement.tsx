@@ -1,15 +1,15 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { useModal, usePageHeader, useToast } from '../hooks';
-import { fetchWithAuth, createWithAuth, updatePatchWithAuth, deleteWithAuth } from '../utils/ApiHelper';
-import { endpoints } from '../config/Apis';
-import Card from '../components/Ui/Card';
-import Button from '../components/Ui/Button';
-import Badge from '../components/Ui/Badge';
-import Input from '../components/Ui/Input';
-import Textarea from '../components/Ui/Textarea';
-import Select from '../components/Ui/Select';
-import useSearchFilter from '../hooks/useSearch';
-import { DIFFICULTY_CONFIG, DIFFICULTY_OPTIONS } from '../types';
+import { useModal, usePageHeader, useToast, useSearch } from '../../hooks';
+import { fetchWithAuth, createWithAuth, updatePatchWithAuth, deleteWithAuth } from '../../utils/ApiHelper';
+import { endpoints } from '../../config/Apis';
+import Card from '../../components/Ui/Card';
+import Button from '../../components/Ui/Button';
+import Badge from '../../components/Ui/Badge';
+import Input from '../../components/Ui/Input';
+import Textarea from '../../components/Ui/Textarea';
+import Select from '../../components/Ui/Select';
+import GenericTable, { TableColumn } from '../../components/GenericTable';
+import { DIFFICULTY_CONFIG, DIFFICULTY_OPTIONS } from '../../types';
 
 const emptyForm = {
   title: '',
@@ -40,19 +40,16 @@ export default function TopicManagement() {
   const [formModalOpen, setFormModalOpen] = useState(false);
 
 
-  const { search, setSearch, filtered: filteredTopics } = useSearchFilter({
-    data: topics,
-    searchFields: (topic) => [topic.title, topic.description],
-    extraFilter: (topic) =>
-      !difficultyFilter || topic.difficulty_level === difficultyFilter,
-  });
+  const { search, setSearch, searchParams } = useSearch();
 
 
-  useEffect(() => { loadTopics(); }, []);
+  useEffect(() => { loadTopics(); }, [searchParams, difficultyFilter]);
 
   const loadTopics = async () => {
-    await fetchWithAuth(endpoints.myTopic, setTopics, () => { }, {}, setLoading);
-  };
+    await fetchWithAuth(endpoints.myTopic, (data: any) => {
+          setTopics(Array.isArray(data) ? data : data?.results ?? []);
+        }, () => { }, { ...searchParams, difficulty_level: difficultyFilter || undefined }, setLoading);
+    };
 
   const loadTopicDetail = async (id: number, onSuccess: any) => {
     await fetchWithAuth(endpoints.TopicDetail(id), onSuccess, () => { }, {});
@@ -104,9 +101,7 @@ export default function TopicManagement() {
   const openFormModal = (topic: any = null) => {
     if (topic) {
       setEditingId(topic.id);
-      console.log(typeof topic.id);
       loadTopicDetail(topic.id, (data: any) => {
-        console.log('Loaded topic detail:', data);
         setForm({
           title: data.title || '',
           description: data.description || '',
@@ -181,9 +176,43 @@ export default function TopicManagement() {
     });
   };
 
+  const columns: TableColumn<any>[] = [
+    {
+      key: 'title',
+      label: 'Đề tài',
+      render: (topic) => (
+        <div className="min-w-0">
+          <h4 className="font-medium text-gray-800 text-sm">{topic.title}</h4>
+          <p className="text-xs text-gray-400 truncate mt-0.5">{topic.description}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'difficulty_level',
+      label: 'Độ khó',
+      align: 'center',
+      render: (topic) => {
+        const diff = DIFFICULTY_CONFIG[topic.difficulty_level] || DIFFICULTY_CONFIG.medium;
+        return <Badge variant={diff.variant} dot>{diff.label}</Badge>;
+      },
+    },
+    {
+      key: 'actions',
+      label: 'Thao tác',
+      align: 'right',
+      render: (topic) => (
+        <Badge variant="neutral" className="!px-1.5 !py-0.5 !gap-1">
+          <Button variant="ghost" size="icon" icon="fa-regular fa-eye" onClick={() => openDetailModal(topic)} aria-label="Chi tiết" />
+          <Button variant="ghost" size="icon" icon="fa-regular fa-pen-to-square" onClick={() => openFormModal(topic)} aria-label="Sửa" />
+          <Button variant="ghost" size="icon" icon="fa-regular fa-trash-can" onClick={() => openDeleteConfirm(topic)} aria-label="Xóa" />
+        </Badge>
+      ),
+    },
+  ];
+
   return (
-    <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
-      <div className="max-w-5xl mx-auto w-full space-y-6">
+    <div className="space-y-6">
+      <div className="mx-auto w-full space-y-6">
         <Card variant="elevated" bodyClassName="space-y-4">
           <div className="flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
@@ -215,43 +244,18 @@ export default function TopicManagement() {
           </div>
         </Card>
 
-        <Card variant="elevated" bodyClassName="space-y-0">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
             </div>
-          ) : filteredTopics.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-              <i className="fa-solid fa-folder-open text-4xl mb-3"></i>
-              <p className="text-sm font-medium">
-                {search || difficultyFilter ? 'Không tìm thấy đề tài phù hợp' : 'Chưa có đề tài nào'}
-              </p>
-              <p className="text-xs mt-1">
-                {search || difficultyFilter ? 'Thử thay đổi từ khóa hoặc bộ lọc' : 'Bắt đầu bằng cách tạo đề tài đầu tiên!'}
-              </p>
-            </div>
           ) : (
-            <div className="divide-y divide-gray-50 overflow-x-auto overflow-y-auto max-h-[520px]">
-              {filteredTopics.map((topic) => {
-                const diff = DIFFICULTY_CONFIG[topic.difficulty_level] || DIFFICULTY_CONFIG.medium;
-                return (
-                  <div key={topic.id} className="flex items-center gap-4 p-4 hover:bg-gray-50/50 transition-colors">
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-gray-800 text-sm">{topic.title}</h4>
-                      <p className="text-xs text-gray-400 truncate mt-0.5">{topic.description}</p>
-                    </div>
-                    <Badge variant={diff.variant} dot>{diff.label}</Badge>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <Button variant="ghost" size="icon" icon="fa-regular fa-eye" onClick={() => openDetailModal(topic)} aria-label="Chi tiết" />
-                      <Button variant="ghost" size="icon" icon="fa-regular fa-pen-to-square" onClick={() => openFormModal(topic)} aria-label="Sửa" />
-                      <Button variant="ghost" size="icon" icon="fa-regular fa-trash-can" onClick={() => openDeleteConfirm(topic)} aria-label="Xóa" />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <GenericTable
+              rows={topics}
+              columns={columns}
+              rowKey={(topic) => topic.id}
+              emptyText={search || difficultyFilter ? 'Không tìm thấy đề tài phù hợp' : 'Chưa có đề tài nào'}
+            />
           )}
-        </Card>
       </div>
 
       {formModalOpen && (
@@ -287,6 +291,6 @@ export default function TopicManagement() {
           </div>
         </div>
       )}
-    </main>
+    </div>
   );
 }

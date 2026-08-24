@@ -60,10 +60,24 @@ class UserViewSet(viewsets.ViewSet):
             permission_classes=[IsLecturerRole])
     def topics(self, request):
         if request.method == "GET":
+            from django.db.models import Q
+
             topics = ListOfTopics.objects.filter(
                 lecturer=request.user,
                 active=True,
             )
+
+            search = request.query_params.get('search')
+            if search:
+                topics = topics.filter(
+                    Q(title__icontains=search) |
+                    Q(description__icontains=search)
+                )
+
+            difficulty = request.query_params.get('difficulty_level')
+            if difficulty:
+                topics = topics.filter(difficulty_level=difficulty)
+
             paginator = ItemPaginator()
             page = paginator.paginate_queryset(topics, request, view=self)
             if page is not None:

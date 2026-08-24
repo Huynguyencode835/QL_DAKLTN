@@ -18,18 +18,16 @@ from theses.views.reports_views import (
 
 
 class ScheduleViewSet(viewsets.ViewSet,
-                      generics.ListAPIView,
-                      generics.CreateAPIView,
-                      generics.RetrieveAPIView,
                       generics.UpdateAPIView,
                       generics.DestroyAPIView):
     serializer_class = PeriodicReportScheduleSerializer
     permission_classes = [IsAuthenticated]
+    http_method_names = ['post', 'patch', 'delete', 'head', 'options']
 
     def get_permissions(self):
         if self.action == 'report':
             return [CanCreateReport()]
-        if self.action in ('create', 'update', 'partial_update', 'destroy'):
+        if self.action in ('update', 'partial_update', 'destroy'):
             return [IsLecturerRole()]
         return super().get_permissions()
 
@@ -61,12 +59,6 @@ class ScheduleViewSet(viewsets.ViewSet,
                 raise PermissionDenied('Chỉ giảng viên tạo lịch mới được sửa/xoá lịch này.')
 
         return obj
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(lecturer=request.user)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'], url_path='report')
     def report(self, request, pk=None):

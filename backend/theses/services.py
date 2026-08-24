@@ -48,7 +48,7 @@ def _reevaluate_main_candidate(registration):
         return
 
     if candidate.approval_status == RegistrationLecturer.ApprovalStatus.APPROVED:
-        remaining = get_lecturer_remaining_slots(candidate.lecturer, registration.registration_period)
+        remaining = get_lecturer_remaining_slots(candidate.lecturer)
 
         if remaining < 0:
             # Hết slot tại thời điểm xét -> tự động reject nguyện vọng này,

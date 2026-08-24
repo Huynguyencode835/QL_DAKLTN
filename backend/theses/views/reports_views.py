@@ -1,6 +1,5 @@
 # reports/views.py
 from django.utils import timezone
-from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 from rest_framework import viewsets, generics, status
@@ -52,31 +51,18 @@ def create_report_or_cleanup(**report_kwargs):
 
 class ReportViewSet(
     viewsets.ViewSet,
-    generics.ListAPIView,
-    generics.RetrieveAPIView,
+    generics.GenericAPIView,
 ):
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
-    queryset = Report.objects.select_related('registration').all()
 
     def get_permissions(self):
         if self.action == 'upload_final':
             return [CanCreateReport()]
         return [CanAccessReport()]
 
-    def get_serializer_class(self):
-        return ReportSerializer
-
     def get_queryset(self):
-        qs = Report.objects.select_related('registration')
-
-        if self.action == 'list':
-            registration_id = self.request.query_params.get('registration_id')
-            if not registration_id:
-                raise DRFValidationError('Thiếu tham số registration_id')
-            qs = qs.filter(registration_id=registration_id)
-
-        return qs
+        return Report.objects.select_related('registration')
 
     @action(detail=False, methods=['post'], url_path='upload-final')
     def upload_final(self, request, *args, **kwargs):
@@ -117,6 +103,12 @@ class ReportViewSet(
         )
 
         return Response(ReportSerializer(report).data, status=status.HTTP_201_CREATED)
+
+    # --- custom action: xem chi tiết report ---
+    @action(detail=True, methods=['get'], url_path='detail')
+    def report_detail(self, request, pk=None):
+        report = self.get_object()
+        return Response(ReportSerializer(report).data)
 
     # --- custom action: tải file ---
     @action(detail=True, methods=['get'])

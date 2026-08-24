@@ -5,25 +5,24 @@ from theses.models import (
 
 
 class PeriodicReportScheduleSerializer(serializers.ModelSerializer):
-    registrations = serializers.PrimaryKeyRelatedField(read_only=True, many=True)
     sequence_number = serializers.IntegerField(read_only=True)
-    lecturer = serializers.PrimaryKeyRelatedField(read_only=True)
 
     class Meta:
         model = PeriodicReportSchedule
         fields = [
-            'id', 'registrations', 'sequence_number', 'title', 'deadline',
-            'lecturer', 'registration_period', 'created_date',
+            'id', 'sequence_number', 'title', 'deadline'
         ]
-        read_only_fields = ['id', 'created_date']
+        read_only_fields = ['id']
 
     def validate(self, attrs):
         instance = self.instance
         request = self.context.get('request')
 
         lecturer = instance.lecturer if instance else (request.user if request else None)
-        period = attrs.get('registration_period') or (
-            instance.registration_period if instance else None
+        period = (
+            attrs.get('registration_period')
+            or self.context.get('registration_period')
+            or (instance.registration_period if instance else None)
         )
         deadline = attrs.get('deadline') or (instance.deadline if instance else None)
 

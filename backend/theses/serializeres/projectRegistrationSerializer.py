@@ -29,10 +29,9 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
     note1 = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
     note2 = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
 
-    # Các field chỉ dành riêng cho Lecturer/Staff xem dạng list
     LECTURER_STAFF_LIST_FIELDS = (
         'id', 'student_id', 'student_name', 'project_title',
-        'status', 'lecturer_name',
+        'status', 'lecturer_name','wants_thesis_upgrade'
     )
 
     class Meta:
@@ -63,7 +62,6 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
         if user.role == User.Role.STUDENT:
             return data
 
-        # Lecturer / Staff xem dạng list: chỉ trả về field cần thiết
         if user.role in (User.Role.LECTURER, User.Role.STAFF):
             return {
                 key: value for key, value in data.items()
@@ -193,6 +191,9 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
         note1 = validated_data.pop('note1', '')
         note2 = validated_data.pop('note2', '')
 
+        if not validated_data.get('wants_thesis_upgrade', False):
+            validated_data['status'] = ProjectRegistration.STATUS.ASSIGNED_LECTURER_AND_PENDING
+
         registration = super().create(validated_data)
 
         if advisor1:
@@ -315,3 +316,31 @@ class AddLecturerSerializer(serializers.Serializer):
         if lecturer.faculty != registration.student.faculty:
             raise serializers.ValidationError('Giảng viên phải cùng khoa với sinh viên.')
         return lecturer
+
+    def validate(self, attrs):
+        registration = self.context.get('registration')
+        lecturer_id = attrs.get('lecturer_id')
+
+        if registration.wants_thesis_upgrade:
+            already_rejected = registration.lecturer_assignments.filter(
+                lecturer_id=lecturer_id,
+                approval_status=RegistrationLecturer.ApprovalStatus.REJECTED,
+            ).exists()
+            if already_rejected:
+                raise serializers.ValidationError(
+                    'Giảng viên này đã từng bị từ chối cho đăng ký này, không thể thêm lại.'
+                )
+
+            has_pending = registration.lecturer_assignments.filter(
+                role=RegistrationLecturer.Role.PREFERENCE,
+                approval_status__in=[
+                    RegistrationLecturer.ApprovalStatus.PENDING,
+                    RegistrationLecturer.ApprovalStatus.APPROVED,
+                ],
+            ).exists()
+            if has_pending:
+                raise serializers.ValidationError(
+                    'Đăng ký này còn nguyện vọng đang chờ duyệt, chưa thể phân giảng viên thủ công.'
+                )
+
+        return attrs

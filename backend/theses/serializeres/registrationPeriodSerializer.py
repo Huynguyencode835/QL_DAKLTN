@@ -44,7 +44,7 @@ class RegistrationPeriodSerializer(serializers.ModelSerializer):
             'created_date',
             'active',
         ]
-        read_only_fields = ['id', 'created_by', 'created_date', 'active']
+        read_only_fields = ['id', 'created_by', 'created_date', 'active', 'status']
 
     def validate_name(self, value):
         value = validate_non_blank(value, 'Tên đợt')
@@ -98,28 +98,6 @@ class RegistrationPeriodSerializer(serializers.ModelSerializer):
             'Thời gian kết thúc đăng ký', 'thời gian bắt đầu nộp báo cáo',
         )
 
-        status = attrs.get('status')
-        if status in RegistrationPeriod.OPEN_STATUSES:
-            request = self.context.get('request')
-
-            if self.instance:
-                faculty = self.instance.faculty
-            else:
-                faculty = request.user.faculty if request and request.user.is_authenticated else None
-
-            if faculty:
-                conflicting = RegistrationPeriod.objects.filter(
-                    active=True,
-                    faculty=faculty,
-                    status__in=RegistrationPeriod.OPEN_STATUSES,
-                )
-                if self.instance:
-                    conflicting = conflicting.exclude(pk=self.instance.pk)
-                if conflicting.exists():
-                    raise serializers.ValidationError(
-                        f'Khoa "{faculty.name}" đã có đợt đang mở, không thể tạo thêm.'
-                    )
-
         return attrs
 
     def create(self, validated_data):
@@ -127,4 +105,5 @@ class RegistrationPeriodSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             validated_data['created_by'] = request.user
             validated_data['faculty'] = request.user.faculty
+        validated_data['status'] = RegistrationPeriod.STATUS.DRAFT
         return super().create(validated_data)

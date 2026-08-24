@@ -86,6 +86,22 @@ class IsStaffSameFaculty(IsAuthenticated):
         )
 
 
+class IsStaffSameFacultyForPeriod(IsAuthenticated):
+    def has_permission(self, request, view):
+        return (
+            super().has_permission(request, view) and
+            request.user.role == User.Role.STAFF
+        )
+
+    def has_object_permission(self, request, view, obj):
+        if not super().has_permission(request, view):
+            return False
+        return (
+            request.user.faculty is not None and
+            obj.faculty_id == request.user.faculty_id
+        )
+
+
 class IsRegistrationOwnerOrStaff(IsAuthenticated):
     def has_object_permission(self, request, view, obj):
         if not super().has_permission(request, view):

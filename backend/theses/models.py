@@ -200,6 +200,7 @@ class ListOfTopics(BaseModel):
 
 class RegistrationPeriod(BaseModel):
     class STATUS(models.TextChoices):
+        DRAFT = 'draft', 'chưa công bố'
         SCHEDULED = 'scheduled', 'Chờ mở đăng ký'
         STUDENT_REGISTRATION = 'student_registration', 'Đang mở đăng ký'
         IN_PROGRESS = 'in_progress', 'Đang thực hiện đồ án'
@@ -234,7 +235,7 @@ class RegistrationPeriod(BaseModel):
         help_text='Số ngày cho phép nộp báo cáo, tính từ report_submission_start',
     )
 
-    status = models.CharField(max_length=20, choices=STATUS.choices, default=STATUS.SCHEDULED)
+    status = models.CharField(max_length=20, choices=STATUS.choices, default=STATUS.DRAFT)
 
     faculty = models.ForeignKey(
         Faculty, on_delete=models.CASCADE, null=False, blank=False,
@@ -306,8 +307,8 @@ class ProjectRegistration(BaseModel):
 
     class STATUS(models.TextChoices):
         WAITING_LECTURER_AND_PENDING = 'waiting_lecturer', 'Chờ phân giảng viên hướng dẫn'
+        WAITING_STAFF_ASSIGNMENT = 'waiting_staff_assignment', 'chờ giáo vụ phân công'
         ASSIGNED_LECTURER_AND_PENDING = 'assigned_lecturer', 'Đã phân giảng viên hướng dẫn'
-        WAITING_STAFF_ASSIGNMENT = 'waiting_staff_assignment', 'Các nguyện vọng bị từ chối, chờ giáo vụ phân công'
 
     status = models.CharField(max_length=50, default=STATUS.WAITING_LECTURER_AND_PENDING, choices=STATUS.choices)
     wants_thesis_upgrade = models.BooleanField(default=False)
@@ -325,10 +326,6 @@ class ProjectRegistration(BaseModel):
 
     final_score = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
 
-    # FIX: diagram thể hiện Committee (1) -- (1..*) ProjectRegistration, tức MỘT
-    # ProjectRegistration chỉ thuộc ĐÚNG 1 hội đồng, và 1 hội đồng chấm nhiều đồ án.
-    # Đây là quan hệ 1-nhiều, KHÔNG phải M2M. Field này thay cho
-    # Committee.registrations (ManyToManyField) ở bản trước — đã sửa sai đó tại đây.
     committee = models.ForeignKey(
         'Committee',
         on_delete=models.SET_NULL,

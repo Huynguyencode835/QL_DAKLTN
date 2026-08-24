@@ -1,29 +1,21 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
-interface UseSearchFilterOptions<T> {
-  data: T[];
-  searchFields: (item: T) => (string | undefined | null)[]; // các field dùng để search
-  extraFilter?: (item: T) => boolean; // filter thêm (status, difficulty, ...)
+interface UseSearchOptions {
+  debounceMs?: number;
 }
 
-function useSearchFilter<T>({ data, searchFields, extraFilter }: UseSearchFilterOptions<T>) {
+export default function useSearch({ debounceMs = 400 }: UseSearchOptions = {}) {
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim();
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), debounceMs);
+    return () => clearTimeout(timer);
+  }, [search, debounceMs]);
 
-    return data.filter((item) => {
-      if (q) {
-        const fields = searchFields(item);
-        const matched = fields.some((field) => field?.toLowerCase().includes(q));
-        if (!matched) return false;
-      }
-      if (extraFilter && !extraFilter(item)) return false;
-      return true;
-    });
-  }, [data, search, extraFilter, searchFields]);
+  const searchParams = useMemo(() => {
+    return debouncedSearch ? { search: debouncedSearch } : {};
+  }, [debouncedSearch]);
 
-  return { search, setSearch, filtered };
+  return { search, setSearch, searchParams };
 }
-
-export default useSearchFilter;

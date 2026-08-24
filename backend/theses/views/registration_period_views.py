@@ -1,7 +1,7 @@
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, viewsets, status
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, ValidationError as DRFValidationError
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -9,22 +9,28 @@ from django.db import IntegrityError, transaction
 from rest_framework import serializers
 
 
-from theses.models import User, ProjectRegistration, RegistrationPeriod, RegistrationLecturer
+from theses.models import User, ProjectRegistration, RegistrationPeriod, RegistrationLecturer,PeriodicReportSchedule, Report
+from theses.paginators import ItemRegistration
 from theses.permissions import (
     CanCreateRegistration, IsStaffRole,
     IsRegistrationOwnerOrStaff, IsLecturerOrStaff,
     IsSupervisingLecturerForRegistration, IsStaffSameFacultyForRegistration,
-    CanAccessRegistration,
+    CanAccessRegistration, IsLecturerRole, IsStaffSameFacultyForPeriod,
 )
 from theses.serializeres import projectRegistrationSerializer, registrationPeriodSerializer
+from theses.serializeres.scheduleSerializer import PeriodicReportScheduleSerializer
+from theses.serializeres.reportsSerializer import ReportMatrixSerializer
 from theses.services import _reevaluate_main_candidate, get_lecturer_remaining_slots
 
 
 class RegistrationPeriodViewSet(viewsets.ViewSet,
                                 generics.ListAPIView,
                                 generics.CreateAPIView ,
-                                generics.RetrieveAPIView):
+                                generics.RetrieveAPIView,
+                                generics.UpdateAPIView,
+                                generics.DestroyAPIView):
     queryset = RegistrationPeriod.objects.filter(active=True)
+    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -32,9 +38,12 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
         return registrationPeriodSerializer.RegistrationPeriodSerializer
 
     def get_queryset(self):
-        return RegistrationPeriod.objects.filter(
+        qs = RegistrationPeriod.objects.filter(
             active=True, faculty=self.request.user.faculty,
         )
+        if self.request.user.role != User.Role.STAFF:
+            qs = qs.exclude(status=RegistrationPeriod.STATUS.DRAFT)
+        return qs
 
     def get_permissions(self):
         if self.action == 'registrations':
@@ -42,13 +51,16 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
                 return [CanCreateRegistration()]
         if self.action == 'create':
             return [IsStaffRole()]
+        if self.action == 'schedules' and self.request.method == 'POST':
+            return [IsLecturerRole()]
+        if self.action in ('update', 'partial_update', 'destroy', 'publish'):
+            return [IsStaffSameFacultyForPeriod()]
         if self.action in ('registration_detail', 'approve_registration',
                         'reject_registration', 'add_lecturer_to_registration'):
             return [IsRegistrationOwnerOrStaff()]
         if self.action == 'list':
             return [IsLecturerOrStaff()]
         return [IsAuthenticated()]
-
 
     def get_object(self):
         pk = self.kwargs.get('pk')
@@ -67,7 +79,54 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
 
         return super().get_object()
 
+    def _check_draft(self, period):
+        if period.status != RegistrationPeriod.STATUS.DRAFT:
+            raise DRFValidationError(
+                'Chỉ được sửa/xoá khi đợt ở trạng thái DRAFT (chưa công bố).'
+            )
+
+    def partial_update(self, request, *args, **kwargs):
+        period = self.get_object()
+        self._check_draft(period)
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        period = self.get_object()
+        self._check_draft(period)
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=['post'], url_path='publish')
+    def publish(self, request, pk=None):
+        period = self.get_object()
+
+        if period.status != RegistrationPeriod.STATUS.DRAFT:
+            return Response(
+                {'detail': 'Chỉ chuyển đợt DRAFT (chưa công bố) sang SCHEDULED.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        conflicting = RegistrationPeriod.objects.filter(
+            active=True,
+            faculty=period.faculty,
+            status__in=RegistrationPeriod.OPEN_STATUSES,
+        ).exclude(pk=period.pk).exists()
+        if conflicting:
+            return Response(
+                {'detail': 'Khoa đã có đợt đang mở, không thể công bố thêm.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        period.status = RegistrationPeriod.STATUS.SCHEDULED
+        period.save()
+
+        s = registrationPeriodSerializer.RegistrationPeriodSerializer(
+            period, context={'request': request},
+        )
+        return Response(s.data)
+
     def _get_registration_queryset(self, period):
+        from django.db.models import Q
+
         user = self.request.user
         qs = ProjectRegistration.objects.filter(
             registration_period=period, active=True
@@ -79,6 +138,15 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
         elif user.role == User.Role.STAFF:
             qs = qs.filter(student__faculty=user.faculty)
 
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(
+                Q(student__first_name__icontains=search) |
+                Q(student__last_name__icontains=search) |
+                Q(student__student_profile__student_id__icontains=search) |
+                Q(project_title__icontains=search)
+            )
+
         specialization_id = self.request.query_params.get('specialization')
         if specialization_id:
             qs = qs.filter(specialization_id=specialization_id)
@@ -88,6 +156,17 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
             qs = qs.filter(status=status_filter)
 
         return qs
+
+    def _get_schedule_queryset(self, period):
+        user = self.request.user
+        qs = period.report_schedules.filter(active=True)
+
+        if user.role == User.Role.LECTURER:
+            qs = qs.filter(lecturer=user)
+        elif user.role == User.Role.STUDENT:
+            qs = qs.filter(registrations__student=user)
+
+        return qs.distinct()
 
     def _check_in_student_registration_window(self, period):
         now = timezone.now()
@@ -118,8 +197,164 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
         qs = qs.select_related(
             'student', 'student__student_profile',
         ).prefetch_related('lecturer_assignments__lecturer')
+
+        paginator = ItemRegistration()
+        page = paginator.paginate_queryset(qs, request, view=self)
+        if page is not None:
+            s = projectRegistrationSerializer.ProjectRegistrationSerializer(
+                page, many=True, context={'request': request},
+            )
+            return paginator.get_paginated_response(s.data)
+
         s = projectRegistrationSerializer.ProjectRegistrationSerializer(
             qs, many=True, context={'request': request},
+        )
+        return Response(s.data)
+
+    def _build_report_columns(self, period, lecturer=None):
+        schedules = []
+        if lecturer is not None:
+            schedules = list(
+                PeriodicReportSchedule.objects
+                .filter(lecturer=lecturer, registration_period=period)
+                .order_by('sequence_number')
+            )
+
+        periodic_columns = [
+            {
+                'key': f'periodic_{s.sequence_number}',
+                'label': f'Báo cáo lần {s.sequence_number}',
+                'schedule_id': s.id,
+                'deadline': s.deadline,
+            }
+            for s in schedules
+        ]
+        final_column = {
+            'key': 'final',
+            'label': 'Báo cáo cuối kỳ',
+            'schedule_id': None,
+            'deadline': period.report_submission_end,
+        }
+        return periodic_columns + [final_column]
+
+    def _build_report_map(self, registrations, is_staff_view):
+        reports = Report.objects.filter(registration_id__in=[r.id for r in registrations])
+        if is_staff_view:
+            reports = reports.filter(report_type=Report.ReportType.FINAL)
+
+        report_map = {}
+        for r in reports:
+            key = f'periodic_{r.sequence_number}' if r.report_type == Report.ReportType.PERIODIC else 'final'
+            report_map[(r.registration_id, key)] = r
+        return report_map
+    
+    def _approved_main_registrations_queryset(self, period, lecturer=None):
+        from django.db.models import Q
+
+        filter_kwargs = {
+            'registration_period': period,
+            'lecturer_assignments__role': RegistrationLecturer.Role.MAIN,
+            'lecturer_assignments__approval_status': RegistrationLecturer.ApprovalStatus.APPROVED,
+            'active': True,
+        }
+        if lecturer is not None:
+            filter_kwargs['lecturer_assignments__lecturer'] = lecturer
+
+        qs = ProjectRegistration.objects.filter(**filter_kwargs)
+
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(
+                Q(student__first_name__icontains=search) |
+                Q(student__last_name__icontains=search) |
+                Q(student__student_profile__student_id__icontains=search) |
+                Q(project_title__icontains=search)
+            )
+
+        return qs.select_related('student__student_profile').distinct()
+
+    @action(methods=['GET'], detail=True, url_path='report-matrix', permission_classes=[IsLecturerOrStaff()])
+    def reportMatrix(self, request, pk=None):
+        if pk == 'current':
+            period = RegistrationPeriod.objects.filter(
+                faculty=request.user.faculty,
+                status__in=RegistrationPeriod.OPEN_STATUSES,
+            ).first()
+            if not period:
+                raise ('Không có đợt đăng ký nào đang mở.')
+        else:
+            period = get_object_or_404(RegistrationPeriod, pk=pk)
+
+        user = request.user
+        is_staff_view = user.role == User.Role.STAFF
+        is_student_view = user.role == User.Role.STUDENT
+
+        if is_staff_view:
+            columns = self._build_report_columns(period, lecturer=None)
+            registrations = list(self._approved_main_registrations_queryset(period))
+
+        elif is_student_view:
+            registration = ProjectRegistration.objects.filter(
+                registration_period=period,
+                student=user,
+                active=True,
+            ).select_related('student__student_profile').first()
+
+            if not registration:
+                return Response({'columns': [], 'rows': []})
+
+            main_assignment = registration.lecturer_assignments.filter(
+                role=RegistrationLecturer.Role.MAIN,
+                approval_status=RegistrationLecturer.ApprovalStatus.APPROVED,
+            ).first()
+            lecturer = main_assignment.lecturer if main_assignment else None
+
+            columns = self._build_report_columns(period, lecturer=lecturer)
+            registrations = [registration]
+
+        else:
+            lecturer = user
+            columns = self._build_report_columns(period, lecturer=lecturer)
+            registrations = list(self._approved_main_registrations_queryset(period, lecturer=lecturer))
+
+        report_map = self._build_report_map(registrations, is_staff_view)
+
+        serializer = ReportMatrixSerializer(
+            registrations, many=True,
+            context={'columns': columns, 'report_map': report_map},
+        )
+        return Response({'columns': columns, 'rows': serializer.data})
+
+    @action(methods=['GET', 'POST'], detail=True, url_path='schedules')
+    def schedules(self, request, pk=None):
+        period = self.get_object()
+
+        if request.method == 'POST':
+            serializer = PeriodicReportScheduleSerializer(
+                data=request.data,
+                context={'request': request, 'registration_period': period},
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save(lecturer=request.user, registration_period=period)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        qs = self._get_schedule_queryset(period).select_related(
+            'registration_period', 'lecturer',
+        ).prefetch_related('registrations')
+        s = PeriodicReportScheduleSerializer(
+            qs, many=True, context={'request': request},
+        )
+        return Response(s.data)
+
+    @action(
+        methods=['GET'], detail=True,
+        url_path='schedules/(?P<schedule_pk>[^/.]+)',
+    )
+    def schedule_detail(self, request, pk=None, schedule_pk=None):
+        period = self.get_object()
+        schedule = get_object_or_404(self._get_schedule_queryset(period), pk=schedule_pk)
+        s = PeriodicReportScheduleSerializer(
+            schedule, context={'request': request},
         )
         return Response(s.data)
 
@@ -176,7 +411,8 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            if get_lecturer_remaining_slots(assignment.lecturer) <= 0:
+            if get_lecturer_remaining_slots(request.user) <= 0:
+                print(get_lecturer_remaining_slots(request.user))
                 return Response(
                     {'detail': 'Giảng viên đã hết chỉ tiêu hướng dẫn trong đợt đăng ký hiện tại.'},
                     status=status.HTTP_400_BAD_REQUEST,
@@ -254,6 +490,15 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
             err = self._check_in_student_registration_window(registration.registration_period)
             if err:
                 return Response({'detail': err}, status=status.HTTP_400_BAD_REQUEST)
+
+            if registration.status not in (
+                ProjectRegistration.STATUS.WAITING_LECTURER_AND_PENDING,
+                ProjectRegistration.STATUS.WAITING_STAFF_ASSIGNMENT,
+            ):
+                return Response(
+                    {'detail': 'Đăng ký này không ở trạng thái chờ phân giảng viên.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             serializer = projectRegistrationSerializer.AddLecturerSerializer(
                 data=request.data,

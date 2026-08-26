@@ -26,10 +26,8 @@ class LecturerViewSet(viewsets.ViewSet,
         )
         if self.action == 'retrieve':
             qs = qs.select_related(
-                'faculty', 'lecturer_profile',
+                'lecturer_profile',
             ).prefetch_related('lecturer_profile__specializations')
-        else:
-            qs = qs.select_related('faculty')
         return qs
 
     @action(methods=['GET'], detail=True, url_path='topics')

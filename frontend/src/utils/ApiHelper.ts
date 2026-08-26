@@ -23,7 +23,13 @@ export const fetchWithAuth = async (endpoint: string, onSuccess?: any, onError?:
     try {
         const token = localStorage.getItem("access_token");
         let res = await authApis(token).get(endpoint, { params });
-        if (res.status === 200) onSuccess(res.data);
+        if (res.status === 200) {
+            if (res.data.results && typeof res.data.count === 'number') {
+                onSuccess(res.data.results, res.data);
+            } else {
+                onSuccess(res.data);
+            }
+        }
     } catch (err) { handleError(err, onError); }
     finally { setLoading?.(false); }
 };

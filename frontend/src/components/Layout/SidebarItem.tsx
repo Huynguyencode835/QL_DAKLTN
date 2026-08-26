@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
-const linkBase = 'flex items-center gap-3 px-6 py-3.5 rounded-lg transition-all duration-200 mx-3';
 const linkActive = 'bg-white/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]';
-const linkInactive = 'text-white/70 hover:bg-white/8 hover:text-white';
+const linkInactive = 'text-white/90 hover:bg-white/10 hover:text-white';
 
 interface SidebarItemProps {
   item: {
@@ -13,47 +12,57 @@ interface SidebarItemProps {
     submenu?: { label: string; path: string }[];
   };
   pathname: string;
+  collapsed?: boolean;
 }
 
-export default function SidebarItem({ item, pathname }: SidebarItemProps) {
+export default function SidebarItem({ item, pathname, collapsed = false }: SidebarItemProps) {
   const [open, setOpen] = useState(false);
   const hasSub = item.submenu && item.submenu.length > 0;
   const isActive = hasSub
     ? item.submenu!.some((s) => pathname === s.path)
     : pathname === item.path;
 
+  const linkBase = `flex items-center rounded-lg transition-all duration-200 ${
+    collapsed ? 'justify-center px-0 py-3 mx-2' : 'gap-3 px-6 py-3.5 mx-3'
+  }`;
+
   if (hasSub) {
-    const isOpen = open || isActive;
+    const isOpen = !collapsed && (open || isActive);
     return (
       <li>
         <button
           type="button"
-          onClick={() => setOpen(!open)}
+          onClick={() => !collapsed && setOpen(!open)}
+          title={collapsed ? item.label : undefined}
           className={`${linkBase} w-full text-left ${isActive ? linkActive : linkInactive}`}
         >
-          <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className={`flex items-center min-w-0 ${collapsed ? '' : 'gap-3 flex-1'}`}>
             <i className={`fa-solid ${item.icon} w-5 text-center shrink-0 ${isActive ? 'drop-shadow-[0_2px_4px_rgba(255,255,255,0.3)]' : ''}`} />
-            <span className="font-medium truncate">{item.label}</span>
+            {!collapsed && <span className="font-medium truncate">{item.label}</span>}
           </div>
-          <i className={`fa-solid fa-chevron-down text-[10px] shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-0' : '-rotate-90'}`} />
+          {!collapsed && (
+            <i className={`fa-solid fa-chevron-down text-[10px] shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-0' : '-rotate-90'}`} />
+          )}
         </button>
-        <div className={`overflow-hidden transition-all duration-300 ${isOpen ? 'max-h-96 opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
-          <ul className="space-y-0.5 ml-2">
-            {item.submenu.map((sub) => (
-              <li key={sub.path}>
-                <Link
-                  to={sub.path}
-                  className={`flex items-center gap-3 px-9 py-2.5 rounded-lg transition-all duration-200 text-sm ${
-                    pathname === sub.path ? linkActive : 'text-white/60 hover:bg-white/8 hover:text-white'
-                  }`}
-                >
-                  <span className="w-1 h-1 rounded-full bg-white/40 shrink-0" />
-                  <span className="truncate">{sub.label}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
+        {!collapsed && (
+          <div className={`overflow-hidden transition-all duration-300 ${isOpen ? 'max-h-96 opacity-100 mt-1' : 'max-h-0 opacity-0'}`}>
+            <ul className="space-y-0.5 ml-2">
+              {item.submenu!.map((sub) => (
+                <li key={sub.path}>
+                  <Link
+                    to={sub.path}
+                    className={`flex items-center gap-3 px-9 py-2.5 rounded-lg transition-all duration-200 text-sm ${
+                      pathname === sub.path ? linkActive : 'text-white/60 hover:bg-white/8 hover:text-white'
+                    }`}
+                  >
+                    <span className="w-1 h-1 rounded-full bg-white/40 shrink-0" />
+                    <span className="truncate">{sub.label}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </li>
     );
   }
@@ -62,13 +71,14 @@ export default function SidebarItem({ item, pathname }: SidebarItemProps) {
     <li>
       <Link
         to={item.path!}
+        title={collapsed ? item.label : undefined}
         className={`${linkBase} ${isActive ? `${linkActive} font-semibold` : linkInactive}`}
       >
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className={`flex items-center min-w-0 ${collapsed ? '' : 'gap-3 flex-1'}`}>
           <i className={`fa-solid ${item.icon} w-5 text-center shrink-0 ${isActive ? 'drop-shadow-[0_2px_4px_rgba(255,255,255,0.3)]' : ''}`} />
-          <span className="truncate">{item.label}</span>
+          {!collapsed && <span className="truncate">{item.label}</span>}
         </div>
-        {isActive && <span className="w-1.5 h-1.5 rounded-full bg-white shrink-0 shadow-[0_0_6px_rgba(255,255,255,0.6)]" />}
+        {!collapsed && isActive && <span className="w-1.5 h-1.5 rounded-full bg-white shrink-0 shadow-[0_0_6px_rgba(255,255,255,0.6)]" />}
       </Link>
     </li>
   );

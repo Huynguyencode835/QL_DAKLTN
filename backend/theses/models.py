@@ -200,6 +200,7 @@ class ListOfTopics(BaseModel):
 
 class RegistrationPeriod(BaseModel):
     class STATUS(models.TextChoices):
+        DRAFT = 'draft', 'chưa công bố'
         SCHEDULED = 'scheduled', 'Chờ mở đăng ký'
         STUDENT_REGISTRATION = 'student_registration', 'Đang mở đăng ký'
         IN_PROGRESS = 'in_progress', 'Đang thực hiện đồ án'
@@ -234,7 +235,7 @@ class RegistrationPeriod(BaseModel):
         help_text='Số ngày cho phép nộp báo cáo, tính từ report_submission_start',
     )
 
-    status = models.CharField(max_length=20, choices=STATUS.choices, default=STATUS.SCHEDULED)
+    status = models.CharField(max_length=20, choices=STATUS.choices, default=STATUS.DRAFT)
 
     faculty = models.ForeignKey(
         Faculty, on_delete=models.CASCADE, null=False, blank=False,
@@ -263,7 +264,8 @@ class RegistrationPeriod(BaseModel):
         constraints = [
             models.UniqueConstraint(
                 fields=['faculty'],
-                condition=models.Q(status__in=[
+                condition=models.Q(
+                    active=True,status__in=[
                     'scheduled', 'student_registration', 'in_progress', 'report_submission',
                 ]),
                 name='unique_open_registration_period_per_faculty',
@@ -305,6 +307,7 @@ class ProjectRegistration(BaseModel):
 
     class STATUS(models.TextChoices):
         WAITING_LECTURER_AND_PENDING = 'waiting_lecturer', 'Chờ phân giảng viên hướng dẫn'
+        WAITING_STAFF_ASSIGNMENT = 'waiting_staff_assignment', 'chờ giáo vụ phân công'
         ASSIGNED_LECTURER_AND_PENDING = 'assigned_lecturer', 'Đã phân giảng viên hướng dẫn'
 
     status = models.CharField(max_length=50, default=STATUS.WAITING_LECTURER_AND_PENDING, choices=STATUS.choices)
@@ -323,10 +326,6 @@ class ProjectRegistration(BaseModel):
 
     final_score = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
 
-    # FIX: diagram thể hiện Committee (1) -- (1..*) ProjectRegistration, tức MỘT
-    # ProjectRegistration chỉ thuộc ĐÚNG 1 hội đồng, và 1 hội đồng chấm nhiều đồ án.
-    # Đây là quan hệ 1-nhiều, KHÔNG phải M2M. Field này thay cho
-    # Committee.registrations (ManyToManyField) ở bản trước — đã sửa sai đó tại đây.
     committee = models.ForeignKey(
         'Committee',
         on_delete=models.SET_NULL,
@@ -361,8 +360,7 @@ class ProjectRegistration(BaseModel):
 class RegistrationLecturer(BaseModel):
     class Role(models.TextChoices):
         MAIN = 'main', 'Chính thức'
-        OPTION1 = 'option1', 'Tùy chọn 1'
-        OPTION2 = 'option2', 'Tùy chọn 2'
+        PREFERENCE = 'preference', 'Nguyện vọng'
         REVIEWER = 'reviewer', 'Phản biện'
 
     class ApprovalStatus(models.TextChoices):
@@ -383,6 +381,10 @@ class RegistrationLecturer(BaseModel):
         limit_choices_to={'role': User.Role.LECTURER}
     )
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.MAIN)
+    priority = models.PositiveSmallIntegerField(
+        default=0,
+        help_text='Thứ tự ưu tiên trong các nguyện vọng của cùng 1 registration. Số nhỏ hơn = ưu tiên cao hơn.',
+    )
     approval_status = models.CharField(
         max_length=20, choices=ApprovalStatus.choices, default=ApprovalStatus.PENDING
     )
@@ -395,8 +397,9 @@ class RegistrationLecturer(BaseModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['registration', 'role'],
-                name='unique_role_per_registration',
+                fields=['registration', 'priority'],
+                condition=models.Q(role='preference'),
+                name='unique_priority_per_registration_preference',
             ),
             models.UniqueConstraint(
                 fields=['registration', 'lecturer'],
@@ -442,7 +445,14 @@ class PeriodicReportSchedule(BaseModel):
             ),
         ]
 
-class Report(BaseModel):
+    def clean(self):
+        if self.sequence_number is None:
+            last = PeriodicReportSchedule.objects.filter(
+                lecturer=self.lecturer, registration_period=self.registration_period,
+            ).exclude(pk=self.pk).order_by('-sequence_number').first()
+            self.sequence_number = (last.sequence_number + 1) if last else 1
+# 1 schedule - * report
+class Report(BaseModel): 
     class ReportType(models.TextChoices):
         PERIODIC = 'periodic', 'Báo cáo định kỳ'
         FINAL = 'final', 'Báo cáo cuối kỳ'

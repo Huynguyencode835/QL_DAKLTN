@@ -1,7 +1,7 @@
+import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useUser, usePageHeaderValue, useToast } from '../hooks';
 import SidebarItem from '../components/Layout/SidebarItem';
-import Input from '../components/Ui/Input';
 import Button from '../components/Ui/Button';
 
 const menuConfig: Record<string, any> = {
@@ -9,80 +9,48 @@ const menuConfig: Record<string, any> = {
     {
       group: 'Quản lý',
       items: [
-        { label: 'Quản lý tiến độ', icon: 'fa-chart-line', path: '/' },
+        { label: 'Trang chủ', icon: 'fa-house', path: '/' },
         { label: 'Đợt đồ án/khóa luận', icon: 'fa-chart-line', path: '/period' },
         { label: 'Đăng ký đồ án & khóa luận', icon: 'fa-file-contract', path: '/topic-registration' },
         { label: 'Nộp báo cáo', icon: 'fa-cloud-arrow-up', path: '/reports' },
-        // {
-        //   label: 'Nộp báo cáo',
-        //   icon: 'fa-cloud-arrow-up',
-        //   submenu: [
-        //     { label: 'Đồ án tốt nghiệp', icon: 'fa-diagram-project', path: '/submit-thesis-reports' },
-        //     { label: 'Khóa luận tốt nghiệp', icon: 'fa-book-open', path: '/submit-final-projects' },
-        //   ],
-        // },
-        // { label: 'Yêu cầu đổi tên đề tài', icon: 'fa-pen-to-square', path: '/request-name-change' },
       ],
     },
-    {
-      group: 'Kết quả',
-      items: [
-        { label: 'Điểm & Kết quả', icon: 'fa-award', path: '/grades-and-results' },
-      ],
-    },
-    {
-      group: 'Cá nhân',
-      items: [
-        { label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' },
-      ],
-    },
+    { group: 'Kết quả', items: [{ label: 'Điểm & Kết quả', icon: 'fa-award', path: '/grades-and-results' }] },
+    { group: 'Cá nhân', items: [{ label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' }] },
   ],
   lecturer: [
     {
       group: 'Giảng dạy',
       items: [
-        // { label: 'Dashboard', icon: 'fa-house', path: '/' },
+        { label: 'Trang chủ', icon: 'fa-house', path: '/' },
         { label: 'Đợt đồ án/khóa luận', icon: 'fa-chart-line', path: '/period' },
         { label: 'Quản lý danh sách sinh viên', icon: 'fa-users', path: '/students' },
         { label: 'Quản lý đăng ký đề tài', icon: 'fa-list-check', path: '/topic-management' },
-        { label: 'Quản lý báo cáo định kỳ', icon: 'fa-solid fa-calendar-days', path: '/report-schedule' },
-
+        {
+          label: 'Quản lý báo cáo định kỳ',
+          icon: 'fa-calendar-days',
+          submenu: [
+            { label: 'Tổng quan', path: '/reports-management' },
+            { label: 'Lịch báo cáo', path: '/report-schedule' },
+          ],
+        },
       ],
     },
-    {
-      group: 'Kết quả',
-      items: [
-        { label: 'Điểm & Kết quả', icon: 'fa-award', path: '/grades-and-results' },
-      ],
-    },
-    {
-      group: 'Cá nhân',
-      items: [
-        { label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' },
-      ],
-    },
+    { group: 'Kết quả', items: [{ label: 'Điểm & Kết quả', icon: 'fa-award', path: '/grades-and-results' }] },
+    { group: 'Cá nhân', items: [{ label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' }] },
   ],
   staff: [
     {
       group: 'Quản lý',
       items: [
-        // { label: 'Dashboard', icon: 'fa-house', path: '/' },
+        { label: 'Trang chủ', icon: 'fa-house', path: '/' },
         { label: 'Danh sách sinh viên & đăng ký', icon: 'fa-users', path: '/students' },
         { label: 'Quản lý đợt đăng ký', icon: 'fa-folder-tree', path: '/registration-periods' },
+        { label: 'Tổng quan báo cáo', icon: 'fa-calendar-days', path: '/reports-management' },
       ],
     },
-    {
-      group: 'Kết quả',
-      items: [
-        { label: 'Điều chỉnh điểm', icon: 'fa-sliders', path: '/manage-grades' },
-      ],
-    },
-    {
-      group: 'Cá nhân',
-      items: [
-        { label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' },
-      ],
-    },
+    { group: 'Kết quả', items: [{ label: 'Điều chỉnh điểm', icon: 'fa-sliders', path: '/manage-grades' }] },
+    { group: 'Cá nhân', items: [{ label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' }] },
   ],
   admin: [
     {
@@ -96,18 +64,8 @@ const menuConfig: Record<string, any> = {
         { label: 'Quản lý đợt đăng ký', icon: 'fa-calendar-clock', path: '/registration-periods' },
       ],
     },
-    {
-      group: 'Kết quả',
-      items: [
-        { label: 'Điều chỉnh điểm', icon: 'fa-sliders', path: '/manage-grades' },
-      ],
-    },
-    {
-      group: 'Cá nhân',
-      items: [
-        { label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' },
-      ],
-    },
+    { group: 'Kết quả', items: [{ label: 'Điều chỉnh điểm', icon: 'fa-sliders', path: '/manage-grades' }] },
+    { group: 'Cá nhân', items: [{ label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' }] },
   ],
 };
 
@@ -118,7 +76,6 @@ const roleMeta: Record<string, any> = {
   admin: { badge: 'ADMIN PANEL', label: 'Quản trị' },
 };
 
-// Derives up to two initials from a name for the avatar fallback
 function getInitials(name?: string) {
   if (!name) return '?';
   const parts = name.trim().split(/\s+/);
@@ -128,6 +85,7 @@ function getInitials(name?: string) {
 }
 
 export default function MainLayout() {
+  const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout, loading } = useUser();
@@ -148,79 +106,98 @@ export default function MainLayout() {
   const isLoggedIn = !!user;
 
   return (
-    <div className="flex h-screen overflow-hidden text-sm bg-background">
-      <aside className="w-64 bg-[#1657d1] text-white flex flex-col h-full shrink-0 relative z-20 shadow-[6px_0_30px_-12px_rgba(0,0,0,0.45)]">
-        <div className="relative p-5 flex items-center gap-3 border-b border-white/15">
+    <div className="flex h-screen overflow-hidden text-sm bg-slate-100">
+      {/* SIDEBAR — icon rail that expands, own scroll, not stretched full-bleed */}
+      <aside
+        className={`relative shrink-0 h-full flex flex-col bg-[#0c56d0] text-white transition-[width] duration-300 ease-in-out ${
+          collapsed ? 'w-[76px]' : 'w-64'
+        }`}
+      >
+        <div className={`h-16 flex items-center border-b border-white/15 shrink-0 ${collapsed ? 'justify-center px-0' : 'gap-3 px-5'}`}>
           <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
             <i className="fa-solid fa-graduation-cap text-white text-[15px]" />
           </div>
-          <div className="min-w-0">
-            <h1 className="font-bold text-base leading-tight tracking-tight">Thesis Portal</h1>
-            <span className="text-[10px] text-white/70 font-semibold tracking-[0.2em]">{meta.badge}</span>
-          </div>
+          {!collapsed && (
+            <div className="min-w-0">
+              <h1 className="font-bold text-base leading-tight tracking-tight whitespace-nowrap">Thesis Portal</h1>
+              <span className="text-[10px] text-white/70 font-semibold tracking-[0.2em]">{meta.badge}</span>
+            </div>
+          )}
         </div>
 
-        <nav className="no-scrollbar flex-1 overflow-y-auto py-4 space-y-6 relative">
+        <nav className="no-scrollbar flex-1 overflow-y-auto overflow-x-hidden py-10 space-y-6">
           {menuConfig[role].map((group: any) => (
             <div key={group.group}>
-              <div className="px-6 mb-2 text-[10px] font-bold text-[#ffd43b] uppercase tracking-[0.14em]">
-                {group.group}
-              </div>
-              <ul className="px-3 space-y-0.5">
+              {!collapsed && (
+                <div className="px-6 mb-2 text-[12px] font-bold text-[#ffd43b]/100 uppercase tracking-[0.14em]">
+                  {group.group}
+                </div>
+              )}
+              <ul className={collapsed ? 'px-2 space-y-1' : 'px-3 space-y-0.5'}>
                 {group.items.map((item: any) => (
-                  <SidebarItem key={item.label} item={item} pathname={location.pathname} />
+                  <SidebarItem key={item.label} item={item} pathname={location.pathname} collapsed={collapsed} />
                 ))}
               </ul>
             </div>
           ))}
         </nav>
 
-        <div className="relative p-3 border-t border-white/15 mt-auto">
+        <div className="p-3 border-t border-white/15 shrink-0">
           <div
             onClick={() => navigate(isLoggedIn ? '/profile' : '/login')}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 transition-colors cursor-pointer group"
+            className={`flex items-center rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 transition-colors cursor-pointer group ${
+              collapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2.5'
+            }`}
           >
             <div className="w-9 h-9 rounded-full ring-2 ring-white/30 shrink-0 bg-white/10 flex items-center justify-center overflow-hidden">
               {isLoggedIn && user?.avatar ? (
                 <img src={user.avatar} alt="" className="w-full h-full object-cover" />
               ) : isLoggedIn ? (
-                <span className="text-[11px] font-semibold text-white">
-                  {getInitials(user.full_name || user.username)}
-                </span>
+                <span className="text-[11px] font-semibold text-white">{getInitials(user.full_name || user.username)}</span>
               ) : (
                 <i className="fa-solid fa-user text-white/50 text-sm" />
               )}
             </div>
-            <div className="min-w-0 flex-1">
-              {isLoggedIn ? (
-                <>
-                  <div className="text-sm font-medium truncate">{user.full_name || user.username || 'Người dùng'}</div>
-                  <div className="text-[10px] text-white/45 truncate">{user.student_id || user.email || ''}</div>
-                </>
-              ) : (
-                <div className="text-sm font-medium text-white/55">Chưa đăng nhập</div>
-              )}
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              {isLoggedIn && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); logout(); toast.info('Đã đăng xuất'); navigate('/login'); }}
-                  className="w-7 h-7 flex items-center justify-center rounded-lg text-white/40 hover:text-red-400 hover:bg-white/10 transition-all"
-                  title="Đăng xuất"
-                >
-                  <i className="fa-solid fa-right-from-bracket text-xs" />
-                </button>
-              )}
-              <i className="fa-solid fa-ellipsis-vertical text-white/25 text-xs opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
+            {!collapsed && (
+              <>
+                <div className="min-w-0 flex-1">
+                  {isLoggedIn ? (
+                    <>
+                      <div className="text-sm font-medium truncate">{user.full_name || user.username || 'Người dùng'}</div>
+                      <div className="text-[10px] text-white/55 truncate">{user.student_id || user.email || ''}</div>
+                    </>
+                  ) : (
+                    <div className="text-sm font-medium text-white/55">Chưa đăng nhập</div>
+                  )}
+                </div>
+                {isLoggedIn && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); logout(); toast.info('Đã đăng xuất'); navigate('/login'); }}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-white/40 hover:text-red-400 hover:bg-white/10 transition-all shrink-0"
+                    title="Đăng xuất"
+                  >
+                    <i className="fa-solid fa-right-from-bracket text-xs" />
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
+
+        {/* Collapse toggle — floats on the sidebar edge */}
+        <button
+          onClick={() => setCollapsed((c) => !c)}
+          className="absolute top-[26px] -right-3 w-6 h-6 rounded-full bg-white text-[#1657d1] shadow-md flex items-center justify-center hover:scale-110 transition-transform z-30"
+          title={collapsed ? 'Mở rộng' : 'Thu gọn'}
+        >
+          <i className={`fa-solid fa-chevron-${collapsed ? 'right' : 'left'} text-[10px]`} />
+        </button>
       </aside>
 
-      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-        <header className="bg-white/85 backdrop-blur-md border-b border-border min-h-16 py-2.5 flex items-center justify-between px-6 shrink-0 z-10 sticky top-0 shadow-[0_1px_10px_rgba(15,23,42,0.05)]">
+      {/* CONTENT CANVAS — header and main are separate floating panels, not full-bleed */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden p-5 gap-4 bg-[#a8c9ff]/5">
+        <header className="bg-white rounded-2xl border border-gray-200/70 shadow-sm min-h-[64px] py-2.5 px-12 flex items-center justify-between shrink-0">
           <div className="min-w-0">
-            <div className="text-[10px] text-[#1657d1] font-semibold uppercase tracking-[0.18em]">{meta.badge}</div>
             <h2 className="text-lg font-bold text-textMain leading-tight tracking-tight truncate">{header.title}</h2>
             {header.description && (
               <p className="text-xs text-gray-500 mt-0.5 truncate max-w-xl">{header.description}</p>
@@ -246,9 +223,7 @@ export default function MainLayout() {
                 {isLoggedIn && user?.avatar ? (
                   <img src={user.avatar} alt="" className="w-full h-full object-cover" />
                 ) : isLoggedIn ? (
-                  <span className="text-[11px] font-semibold text-gray-500">
-                    {getInitials(user.full_name || user.username)}
-                  </span>
+                  <span className="text-[11px] font-semibold text-gray-500">{getInitials(user.full_name || user.username)}</span>
                 ) : (
                   <i className="fa-solid fa-user text-gray-400 text-sm" />
                 )}
@@ -257,7 +232,7 @@ export default function MainLayout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6 bg-background">
+        <main className="flex-1 overflow-y-auto bg-white rounded-2xl border border-gray-200/70 shadow-sm p-6">
           <div className="max-w-7xl mx-auto">
             <Outlet />
           </div>

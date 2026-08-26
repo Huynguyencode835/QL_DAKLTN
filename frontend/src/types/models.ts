@@ -1,6 +1,6 @@
 export type UserRole = 'student' | 'lecturer' | 'staff' | 'admin';
 export type DifficultyLevel = 'easy' | 'medium' | 'difficult';
-export type RegistrationStatus = 'waiting_lecturer' | 'assigned_lecturer' | 'approved' | 'rejected';
+export type RegistrationStatus = 'waiting_lecturer' | 'assigned_lecturer' | 'waiting_staff_assignment' | 'approved' | 'rejected';
 
 export interface UserProfile {
   student_id?: string;
@@ -45,7 +45,7 @@ export interface RegistrationLecturer {
   registration: number;
   lecturer: number;
   lecturer_name?: string;
-  role: 'main' | 'option1' | 'option2' | 'reviewer';
+  role: 'main' | 'preference' | 'reviewer';
   approval_status: 'pending' | 'approved' | 'rejected' | 'skipped';
   responded_at?: string;
   note?: string;
@@ -90,7 +90,7 @@ export interface Registration {
     lecturer_id: number;
     full_name: string;
     email?: string;
-    role: 'main' | 'option1' | 'option2' | 'reviewer';
+    role: 'main' | 'preference' | 'reviewer';
     approval_status: 'pending' | 'approved' | 'rejected' | 'skipped';
     note?: string;
     academic_degree?: string;
@@ -103,6 +103,18 @@ export interface RegistrationPeriod {
   id: number;
   name: string;
   academic_year: string;
+  status?: string;
+  active?: boolean;
+  created_by?: string;
+  created_date?: string;
+  updated_date?: string;
+  student_registration_start?: string;
+  student_registration_end?: string;
+  report_submission_start?: string;
+  report_submission_end?: string;
+  student_registration_days?: number;
+  report_submission_days?: number;
+  execution_duration_weeks?: number;
 }
 
 export type PeriodStatus =
@@ -124,12 +136,51 @@ export interface Period {
   student_registration_days: number;
   execution_duration_weeks: number;
   report_submission_days: number;
+  student_registration_end: string;
+  report_submission_start: string;
+  report_submission_end: string;
 }
 
 export interface Specialization {
   id: number;
   name: string;
   faculty?: { id?: number; name?: string };
+}
+export type ReportStatus = 'pending' | 'submitted' | 'approved' | 'rejected';
+
+export interface ReportColumn {
+  key: string;
+  label: string;
+  schedule_id: number | null;
+  deadline: string;
+}
+
+export interface ReportEntry {
+  status: ReportStatus;
+  report_id: number | null;
+  submitted_at: string | null;
+}
+
+export type StudentReports = Record<string, ReportEntry>;
+
+export interface StudentReportRow {
+  id: number;
+  student_id: string;
+  student_name: string;
+  project_title: string;
+  reports: StudentReports;
+}
+
+export interface ReportTableData {
+  columns: ReportColumn[];
+  rows: StudentReportRow[];
+}
+
+export interface Schedules {
+  id: number;
+  sequence_number: number;
+  title?: string;
+  deadline?: string;
 }
 
 export type ApiCallback<T> = (data: T) => void;

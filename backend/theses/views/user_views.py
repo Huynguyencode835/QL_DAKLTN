@@ -7,13 +7,13 @@ from rest_framework.response import Response
 from theses.models import User, ListOfTopics
 from theses.permissions import IsLecturerRole
 from theses.serializeres import userSerializer, listOfTopicsSerializer
-
+from theses.paginators import ItemPaginator
 
 class UserViewSet(viewsets.ViewSet):
     queryset = User.objects.filter(is_active=True)
     serializer_class = userSerializer.UserSerializer
     parser_classes = [parsers.JSONParser, parsers.MultiPartParser]
-
+    
     @action(methods=["GET"],
             url_path="profile",
             url_name="profile",
@@ -60,13 +60,30 @@ class UserViewSet(viewsets.ViewSet):
             permission_classes=[IsLecturerRole])
     def topics(self, request):
         if request.method == "GET":
+            from django.db.models import Q
+
             topics = ListOfTopics.objects.filter(
                 lecturer=request.user,
                 active=True,
             )
-            s = listOfTopicsSerializer.ListOfTopicsSerializer(
-                topics, many=True, context={"request": request},
-            )
+
+            search = request.query_params.get('search')
+            if search:
+                topics = topics.filter(
+                    Q(title__icontains=search) |
+                    Q(description__icontains=search)
+                )
+
+            difficulty = request.query_params.get('difficulty_level')
+            if difficulty:
+                topics = topics.filter(difficulty_level=difficulty)
+
+            paginator = ItemPaginator()
+            page = paginator.paginate_queryset(topics, request, view=self)
+            if page is not None:
+                s = listOfTopicsSerializer.ListOfTopicsSerializer(page, many=True, context={"request": request})
+                return paginator.get_paginated_response(s.data)
+            s = listOfTopicsSerializer.ListOfTopicsSerializer(topics, many=True, context={"request": request})
             return Response(s.data, status=status.HTTP_200_OK)
 
         serializer = listOfTopicsSerializer.ListOfTopicsDetailSerializer(

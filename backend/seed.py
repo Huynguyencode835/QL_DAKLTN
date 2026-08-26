@@ -26,7 +26,7 @@ DEGREE_LABEL_TO_NAME = {
 }
 
 DEGREE_DATA = [
-    {'name': AcademicDegree.DegreeName.MASTER, 'max_students_quota': 14},
+    {'name': AcademicDegree.DegreeName.MASTER, 'max_students_quota': 5},   # 14 -> 5, dễ test giới hạn
     {'name': AcademicDegree.DegreeName.DOCTOR, 'max_students_quota': 16},
     {'name': AcademicDegree.DegreeName.ASSOC_PROF, 'max_students_quota': 18},
     {'name': AcademicDegree.DegreeName.PROF, 'max_students_quota': 20},
@@ -306,6 +306,74 @@ students_data = [
             'training_type': 'distance', 'program_type': 'standard',
             'academic_year': '2023-2027', 'gpa': 3.40, 'conduct_score': 89,
             'major_idx': 2,
+        },
+    },
+        {
+        'username': 'student21', 'email': 'student21@ou.edu.vn',
+        'first_name': 'Tô Gia', 'last_name': 'Huy',
+        'password': 'Student@123', 'faculty_idx': 0,
+        'profile': {
+            'student_id': '31210016', 'class_name': 'DHCNTT19A',
+            'training_type': 'regular', 'program_type': 'standard',
+            'academic_year': '2021-2025', 'gpa': 3.30, 'conduct_score': 85,
+            'major_idx': 1,
+        },
+    },
+    {
+        'username': 'student22', 'email': 'student22@ou.edu.vn',
+        'first_name': 'Mai Thị', 'last_name': 'Diễm',
+        'password': 'Student@123', 'faculty_idx': 0,
+        'profile': {
+            'student_id': '31210017', 'class_name': 'DHCNTT19B',
+            'training_type': 'regular', 'program_type': 'standard',
+            'academic_year': '2021-2025', 'gpa': 3.10, 'conduct_score': 83,
+            'major_idx': 1,
+        },
+    },
+    {
+        'username': 'student23', 'email': 'student23@ou.edu.vn',
+        'first_name': 'Nguyễn Bảo', 'last_name': 'Long',
+        'password': 'Student@123', 'faculty_idx': 0,
+        'profile': {
+            'student_id': '31210018', 'class_name': 'DHCNTT20A',
+            'training_type': 'regular', 'program_type': 'high_quality',
+            'academic_year': '2022-2026', 'gpa': 3.55, 'conduct_score': 90,
+            'major_idx': 1,
+        },
+    },
+    {
+        'username': 'student24', 'email': 'student24@ou.edu.vn',
+        'first_name': 'Trương Ngọc', 'last_name': 'Diệp',
+        'password': 'Student@123', 'faculty_idx': 0,
+        'profile': {
+            'student_id': '31210019', 'class_name': 'DHCNTT20B',
+            'training_type': 'regular', 'program_type': 'standard',
+            'academic_year': '2022-2026', 'gpa': 2.90, 'conduct_score': 79,
+            'major_idx': 1,
+        },
+    },
+    {
+        'username': 'student25', 'email': 'student25@ou.edu.vn',
+        'first_name': 'Phan Thị', 'last_name': 'Ý Nhi',
+        'password': 'Student@123', 'faculty_idx': 0,
+        'profile': {
+            'student_id': '31210020', 'class_name': 'DHCNTT20A',
+            'training_type': 'regular', 'program_type': 'standard',
+            'academic_year': '2022-2026', 'gpa': 3.40, 'conduct_score': 87,
+            'major_idx': 1,
+        },
+    },
+    {
+        # Sinh viên "quá quota" — dùng để test case: approve bị chặn vì
+        # lecturer3 đã đủ 5/5 slot Thạc sĩ.
+        'username': 'student26', 'email': 'student26@ou.edu.vn',
+        'first_name': 'Đặng Thảo', 'last_name': 'Vy',
+        'password': 'Student@123', 'faculty_idx': 0,
+        'profile': {
+            'student_id': '31210021', 'class_name': 'DHCNTT20B',
+            'training_type': 'regular', 'program_type': 'standard',
+            'academic_year': '2022-2026', 'gpa': 3.00, 'conduct_score': 80,
+            'major_idx': 1,
         },
     },
 ]
@@ -1023,6 +1091,49 @@ def run():
             'approval_status': RegistrationLecturer.ApprovalStatus.REJECTED,
             'note': 'Doanh nghiệp thực tập chưa có hợp đồng hợp tác với trường.', 'wants_thesis_upgrade': False,
         },
+                # ---- Bơm data test giới hạn slot: lecturer3 (Thạc sĩ, quota=5) ----
+        # 4 dòng dưới + student3 (đã có sẵn, APPROVED) = đủ 5/5 slot.
+        {
+            'student': 'student21', 'lecturer': 'lecturer3', 'period': 'closed_1',
+            'project_title': 'Website quản lý cửa hàng tạp hóa',
+            'project_description': 'Xây dựng website quản lý bán hàng cho cửa hàng tạp hóa quy mô nhỏ.',
+            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'wants_thesis_upgrade': False,
+        },
+        {
+            'student': 'student22', 'lecturer': 'lecturer3', 'period': 'report_submission_1',
+            'project_title': 'Ứng dụng đặt lịch cắt tóc',
+            'project_description': 'Phát triển ứng dụng mobile đặt lịch hẹn cho tiệm cắt tóc/spa nhỏ.',
+            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'wants_thesis_upgrade': False,
+        },
+        {
+            'student': 'student23', 'lecturer': 'lecturer3', 'period': 'in_progress_1',
+            'project_title': 'Hệ thống quản lý kho hàng nhỏ',
+            'project_description': 'Xây dựng hệ thống quản lý nhập/xuất kho cho doanh nghiệp vừa và nhỏ.',
+            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'wants_thesis_upgrade': True,
+        },
+        {
+            'student': 'student24', 'lecturer': 'lecturer3', 'period': 'open_1',
+            'project_title': 'Ứng dụng đặt lịch khám thú y',
+            'project_description': 'Xây dựng hệ thống đặt lịch khám cho phòng khám thú y.',
+            'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED, 'wants_thesis_upgrade': False,
+        },
+        # 6/5 -> vượt quota. Đây là registration PENDING/PREFERENCE để test:
+        # khi giáo vụ/hệ thống approve dòng này, phải bị chặn vì lecturer3
+        # đã đủ 5/5 slot Thạc sĩ (student3, 21, 22, 23, 24 đã APPROVED).
+        {
+            'student': 'student25', 'lecturer': 'lecturer3', 'period': 'open_1',
+            'project_title': 'Ứng dụng quản lý lịch học gia sư',
+            'project_description': 'Xây dựng ứng dụng quản lý lịch dạy và học cho trung tâm gia sư.',
+            'approval_status': RegistrationLecturer.ApprovalStatus.PENDING, 'wants_thesis_upgrade': False,
+        },
+        {
+            # Thêm 1 sinh viên nữa cũng đăng ký lecturer3 làm nguyện vọng,
+            # cùng lúc quota đã full -> test cả 2 case PENDING bị chặn.
+            'student': 'student26', 'lecturer': 'lecturer3', 'period': 'open_1',
+            'project_title': 'Website bán hàng handmade',
+            'project_description': 'Xây dựng website bán các sản phẩm thủ công handmade.',
+            'approval_status': RegistrationLecturer.ApprovalStatus.PENDING, 'wants_thesis_upgrade': False,
+        },
     ]
 
     for rd in registrations_data:
@@ -1033,7 +1144,7 @@ def run():
             continue
 
         # Trạng thái tổng của registration: ASSIGNED chỉ khi đã có GVHD chính
-        # thức (MAIN, đã duyệt); nếu chỉ có nguyện vọng (OPTION) đang chờ/từ chối
+        # thức (MAIN, đã duyệt); nếu chỉ có nguyện vọng (PREFERENCE) đang chờ/từ chối
         # thì vẫn WAITING cho tới khi có người được chọn làm MAIN.
         approved = rd.get('approval_status') == RegistrationLecturer.ApprovalStatus.APPROVED
         reg_status = (
@@ -1062,7 +1173,7 @@ def run():
 
             # Nếu đã có giảng viên -> tạo dòng RegistrationLecturer.
             #   - Đã đồng ý (APPROVED) -> role=MAIN (GVHD chính thức)
-            #   - Đang chờ / từ chối -> role=OPTION1 (nguyện vọng)
+            #   - Đang chờ / từ chối -> role=PREFERENCE (nguyện vọng, priority=1)
             if lecturer:
                 approval_status = rd.get('approval_status', RegistrationLecturer.ApprovalStatus.PENDING)
                 responded_at = (
@@ -1076,13 +1187,14 @@ def run():
                 assignment_role = (
                     RegistrationLecturer.Role.MAIN
                     if approval_status == RegistrationLecturer.ApprovalStatus.APPROVED
-                    else RegistrationLecturer.Role.OPTION1
+                    else RegistrationLecturer.Role.PREFERENCE
                 )
                 RegistrationLecturer.objects.get_or_create(
                     registration=registration,
                     lecturer=lecturer,
                     defaults={
                         'role': assignment_role,
+                        'priority': 1,
                         'approval_status': approval_status,
                         'responded_at': responded_at,
                         'note': rd.get('note'),

@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
-import { useUser, useModal, usePageHeader, useToast } from '../hooks';
-import { fetchWithAuth, createWithAuth } from '../utils/ApiHelper';
-import { endpoints } from '../config/Apis';
-import { SectionCard } from '../components/Ui/Card';
-import Card from '../components/Ui/Card';
-import Input from '../components/Ui/Input';
-import Dropdown from '../components/Ui/Dropdown';
-import Textarea from '../components/Ui/Textarea';
-import Button from '../components/Ui/Button';
-import ChoiceCard from '../components/Ui/Choicecard';
-import Badge from '../components/Ui/Badge';
-import { DIFFICULTY_CONFIG } from '../types';
+import { useUser, useModal, usePageHeader, useToast } from '../../hooks';
+import { fetchWithAuth, createWithAuth } from '../../utils/ApiHelper';
+import { endpoints } from '../../config/Apis';
+import { SectionCard } from '../../components/Ui/Card';
+import Card from '../../components/Ui/Card';
+import Input from '../../components/Ui/Input';
+import Dropdown from '../../components/Ui/Dropdown';
+import Textarea from '../../components/Ui/Textarea';
+import Button from '../../components/Ui/Button';
+import ChoiceCard from '../../components/Ui/Choicecard';
+import Badge from '../../components/Ui/Badge';
+import { DIFFICULTY_CONFIG } from '../../types';
+import PeriodCardRegistration from '../../components/Period/PeriodCardRegistration';
+import InfoTile from '../../components/Ui/InfoTile';
 
 export default function TopicRegistration() {
   const { user } = useUser();
@@ -192,6 +194,7 @@ export default function TopicRegistration() {
     waiting_lecturer: { label: 'Chờ phân giảng viên', variant: 'warning' },
     assigned_lecturer: { label: 'Đã phân giảng viên', variant: 'info' },
   };
+  
   const APPROVAL_CONFIG: Record<string, { label: string; variant: string }> = {
     pending: { label: 'Chờ duyệt', variant: 'warning' },
     approved: { label: 'Đã duyệt', variant: 'success' },
@@ -207,7 +210,7 @@ export default function TopicRegistration() {
 
   if (loadingReg) {
     return (
-      <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background flex items-center justify-center">
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-gray-400">
           <i className="fa-solid fa-spinner fa-spin text-3xl"></i>
           <p className="text-sm">Đang tải thông tin đăng ký...</p>
@@ -218,114 +221,116 @@ export default function TopicRegistration() {
 
   if (existingRegistration) {
     return (
-      <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
-        <div className="max-w-3xl mx-auto w-full">
-          <Card
-            variant="elevated"
-            className="!p-0 overflow-hidden !rounded-2xl"
-            bodyClassName="divide-y divide-gray-100"
-          >
-            {/* Header dùng chính prop title/icon/actions của Card */}
-            <div className="flex items-start justify-between gap-3 px-6 py-5">
-              <div className="flex items-start gap-2.5">
-                <span className="w-8 h-8 shrink-0 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                  <i className="fa-regular fa-file-lines text-sm" />
-                </span>
-                <div>
-                  <h3 className="font-semibold text-gray-900 text-sm leading-tight">
-                    Đơn đăng ký luận văn
-                  </h3>
-                  <p className="text-xs text-gray-500 mt-0.5">{thesisLabel}</p>
-                </div>
-              </div>
-              <Badge variant={statusCfg.variant as any}>
-                {statusCfg.label || existingRegistration.status}
-              </Badge>
-            </div>
-
-            {/* Thông tin sinh viên */}
-            <div className="px-6 py-5">
-              <SectionLabel icon="fa-regular fa-user" text="Thông tin sinh viên" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
-                <FieldRow label="Mã số sinh viên" value={p.student_id} />
-                <FieldRow label="Họ và tên" value={user ? `${user.last_name} ${user.first_name}` : '---'} />
-                <FieldRow label="Email" value={user?.email} />
-                <FieldRow label="Lớp" value={p.class_name} />
-                <FieldRow label="Khoa" value={user?.faculty?.name} />
-              </div>
-            </div>
-
-            {/* Thông tin đề tài */}
-            <div className="px-6 py-5">
-              <SectionLabel icon="fa-regular fa-lightbulb" text="Thông tin đề tài" />
-              <p className="text-sm font-medium text-gray-800 mb-2">
-                {existingRegistration.project_title || '—'}
-              </p>
-              <p className="text-sm text-gray-600 leading-relaxed">
-                {existingRegistration.project_description || '—'}
-              </p>
-            </div>
-
-            {/* Giảng viên hướng dẫn */}
-            {existingRegistration.lecturer_assignments?.length > 0 && (
-              <div className="px-6 py-5">
-                <SectionLabel icon="fa-solid fa-chalkboard-user" text="Giảng viên hướng dẫn" />
-                <div className="divide-y divide-gray-50">
-                  {existingRegistration.lecturer_assignments.map((a: any) => {
-                    const appCfg = APPROVAL_CONFIG[a.approval_status] || ({} as { label: string; variant: string });
-                    const roleLabel =
-                      a.role === 'main' ? 'Chính thức'
-                        : a.role === 'option1' ? 'Nguyện vọng 1'
-                          : a.role === 'option2' ? 'Nguyện vọng 2'
-                            : a.role;
-                    const roleVariant =
-                      a.role === 'main' ? 'primary'
-                        : a.role === 'option1' || a.role === 'option2' ? 'warning'
-                          : 'neutral';
-                    return (
-                      <div key={a.id} className="flex items-start justify-between py-3 first:pt-0 last:pb-0">
-                        <div>
-                          <p className="font-medium text-gray-800 text-sm">{a.lecturer_name}</p>
-                          <Badge variant={roleVariant} className="mt-1">{roleLabel}</Badge>
-                        </div>
-                        <div className="text-right">
-                          <Badge variant={appCfg.variant as any}>{appCfg.label}</Badge>
-                          {a.note && (
-                            <p className="text-xs text-gray-400 mt-1 max-w-[200px] truncate">{a.note}</p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Trạng thái đăng ký — dùng lại Card variant="soft" đúng như hệ thống sẵn có */}
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50">
+        <div className="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+          <div className="lg:col-span-3 space-y-5">
             <Card
               variant="soft"
               icon="fa-solid fa-circle-info"
-              className="!rounded-none !border-0 !bg-blue-50/60"
-              bodyClassName="!p-0"
-            >
-              <p className="text-xs text-blue-700 leading-relaxed">
-                {existingRegistration.status === 'waiting_lecturer'
+              title={statusCfg.label || existingRegistration.status}
+              description={
+                existingRegistration.status === 'waiting_lecturer'
                   ? 'Đơn đăng ký của bạn đang chờ được phân giảng viên hướng dẫn.'
-                  : 'Đơn đăng ký của bạn đã được phân giảng viên hướng dẫn và đang chờ duyệt.'}
-              </p>
-            </Card>
-          </Card>
-        </div>
+                  : 'Đơn đăng ký của bạn đã được phân giảng viên hướng dẫn và đang chờ duyệt.'
+              }
+              className="!p-3 !gap-0 !bg-blue-50/60 !border-blue-100"
+            />
 
-        <footer className="mt-8 border-t border-gray-200 pt-4 flex justify-between items-center text-xs text-gray-500 pb-2 px-6 max-w-3xl mx-auto">
-          <p>© 2025 Thesis Portal - Hệ thống Quản lý Luận văn Tốt nghiệp</p>
-          <p>
-            Phiên bản 2.1.0 · Hỗ trợ:{' '}
-            <a className="text-primary hover:underline" href="mailto:support@thesisportal.edu.vn">
-              support@thesisportal.edu.vn
-            </a>
-          </p>
-        </footer>
+            {/* Card chính: trở lại nền trắng, KHÔNG tô màu toàn bộ */}
+            <Card
+              variant="elevated"
+              icon="fa-regular fa-file-lines"
+              title="Đơn đăng ký luận văn"
+              description={thesisLabel}
+              actions={<Badge variant={statusCfg.variant as any}>{statusCfg.label || existingRegistration.status}</Badge>}
+              className="overflow-hidden !rounded-2xl"
+              bodyClassName="divide-y divide-gray-100"
+            >
+              {/* Thông tin sinh viên */}
+              <div className="px-6 py-5">
+                <SectionLabel icon="fa-regular fa-user" text="Thông tin sinh viên" />
+                <div className="ml-4">
+                  <div className="flex items-center gap-4 mb-4">
+                    <span className="w-14 h-14 shrink-0 rounded-full bg-primary/10 text-primary flex items-center justify-center text-lg font-semibold">
+                      {(user ? `${user.last_name} ${user.first_name}` : '?')
+                        .split(' ').slice(-2).map((w: string) => w[0]).join('').toUpperCase()}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold text-gray-900 truncate">
+                        {user ? `${user.last_name} ${user.first_name}` : '---'}
+                      </p>
+                      <p className="text-sm text-gray-500 mt-0.5">MSSV: {p.student_id}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <InfoTile icon="fa-regular fa-envelope" label="Email" value={user?.email} />
+                    <InfoTile icon="fa-regular fa-address-card" label="Lớp" value={p.class_name} />
+                    <InfoTile icon="fa-solid fa-building-columns" label="Khoa" value={user?.faculty?.name} />
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Thông tin đề tài */}
+              <div className="px-6 py-5">
+                <SectionLabel icon="fa-regular fa-lightbulb" text="Thông tin đề tài" />
+                <div className="ml-7">
+                  <p className="text-sm font-semibold text-gray-900 mb-2">
+                    {existingRegistration.project_title || '—'}
+                  </p>
+                  <p className="text-sm text-gray-600 leading-relaxed">
+                    {existingRegistration.project_description || '—'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Giảng viên hướng dẫn — màu chỉ để phân biệt "chính thức" vs "nguyện vọng" */}
+              {existingRegistration.lecturer_assignments?.length > 0 && (
+                <div className="px-6 py-5">
+                  <SectionLabel icon="fa-solid fa-chalkboard-user" text="Giảng viên hướng dẫn" />
+                  <div className="space-y-3 mx-5">
+                    {existingRegistration.lecturer_assignments.map((a: any) => {
+                      const appCfg = APPROVAL_CONFIG[a.approval_status] || { label: 'Chờ duyệt', variant: 'neutral' };
+                      const isMain = a.role === 'main';
+                      const roleLabel = isMain ? 'Chính thức' : a.role === 'preference' ? `Nguyện vọng ${a.priority}` : a.role;
+                      const roleVariant = isMain ? 'primary' : a.role === 'preference' ? 'warning' : 'neutral';
+                      const initials = (a.lecturer_name || '?').split(' ').slice(-2).map((w: string) => w[0]).join('').toUpperCase();
+
+                      return (
+                        <div
+                          key={a.id}
+                          className={`flex items-start justify-between gap-3 rounded-xl border px-4 py-3
+                      ${isMain ? 'border-primary/20 bg-primary/[0.03]' : 'border-gray-100 bg-gray-50/40'}`}
+                        >
+                          <div className="flex items-start gap-3 min-w-0">
+                            <span className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-xs font-semibold
+                        ${isMain ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500'}`}>
+                              {initials}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="font-medium text-gray-800 text-sm truncate">{a.lecturer_name}</p>
+                              <Badge variant={roleVariant} className="mt-1">{roleLabel}</Badge>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <Badge variant={appCfg.variant as any}>{appCfg.label}</Badge>
+                            {a.note && (
+                              <p className="text-xs text-gray-500 mt-1 max-w-[180px] truncate">{a.note}</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </Card>
+          </div>
+
+          <aside className="lg:sticky">
+            <PeriodCardRegistration hideAction />
+          </aside>
+        </div>
       </main>
     );
   }
@@ -340,19 +345,11 @@ export default function TopicRegistration() {
     );
   }
 
-  function FieldRow({ label, value }: { label: string; value?: string | null }) {
-    return (
-      <div>
-        <p className="text-[11px] text-gray-400 mb-0.5">{label}</p>
-        <p className="text-sm text-gray-800">{value || '—'}</p>
-      </div>
-    );
-  }
 
   return (
-    <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
-      <div className="max-w-4xl mx-auto w-full">
-        <form className="space-y-8" onSubmit={handleSubmit}>
+    <main className="flex-1 overflow-y-auto p-4 md:p-6 ">
+      <div className="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+        <form className="space-y-8 lg:col-span-3" onSubmit={handleSubmit}>
           <SectionCard title="Thông tin sinh viên" icon="fa-regular fa-user">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Input label="Mã số sinh viên" value={p.student_id || ''} disabled />
@@ -468,33 +465,39 @@ export default function TopicRegistration() {
             />
 
             {hasSuggestions && (
-              <div className="mt-6 space-y-6">
-                <h4 className="font-bold text-gray-800 text-sm flex items-center gap-2">
+              <div className="mt-6">
+                <h4 className="font-bold text-gray-800 text-sm flex items-center gap-2 mb-4">
                   <i className="fa-solid fa-star text-yellow-400"></i>
                   Danh sách Đề tài gợi ý từ Giảng viên
                 </h4>
 
-                {form.advisor1 && topics1.length > 0 && (
-                  <TopicSuggestionGroup
-                    aspirationLabel="Nguyện vọng 1"
-                    badgeVariant="primary"
-                    lecturer={lecturer1}
-                    topics={topics1}
-                    onSelect={selectTopic}
-                    onViewDetail={(topic: any) => viewTopicDetail(form.advisor1, topic, lecturer1)}
-                  />
-                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {form.advisor1 && topics1.length > 0 ? (
+                    <TopicSuggestionGroup
+                      aspirationLabel="Nguyện vọng 1"
+                      badgeVariant="primary"
+                      lecturer={lecturer1}
+                      topics={topics1}
+                      onSelect={selectTopic}
+                      onViewDetail={(topic: any) => viewTopicDetail(form.advisor1, topic, lecturer1)}
+                    />
+                  ) : (
+                    <EmptyAdvisorSlot label="Nguyện vọng 1" />
+                  )}
 
-                {form.advisor2 && topics2.length > 0 && (
-                  <TopicSuggestionGroup
-                    aspirationLabel="Nguyện vọng 2"
-                    badgeVariant="warning"
-                    lecturer={lecturer2}
-                    topics={topics2}
-                    onSelect={selectTopic}
-                    onViewDetail={(topic: any) => viewTopicDetail(form.advisor2, topic, lecturer2)}
-                  />
-                )}
+                  {form.advisor2 && topics2.length > 0 ? (
+                    <TopicSuggestionGroup
+                      aspirationLabel="Nguyện vọng 2"
+                      badgeVariant="warning"
+                      lecturer={lecturer2}
+                      topics={topics2}
+                      onSelect={selectTopic}
+                      onViewDetail={(topic: any) => viewTopicDetail(form.advisor2, topic, lecturer2)}
+                    />
+                  ) : (
+                    <EmptyAdvisorSlot label="Nguyện vọng 2" />
+                  )}
+                </div>
               </div>
             )}
           </SectionCard>
@@ -506,38 +509,38 @@ export default function TopicRegistration() {
             </Button>
           </div>
         </form>
+        <div>
+          <aside className="lg:sticky">
+            <PeriodCardRegistration hideAction />
+          </aside>
 
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-100 rounded-lg flex items-start gap-3">
-          <i className="fa-solid fa-circle-info text-blue-500 mt-0.5"></i>
-          <div>
-            <h4 className="font-bold text-blue-800 text-sm">Lưu ý quan trọng</h4>
-            <ul className="list-disc list-inside text-xs text-blue-700 mt-2 space-y-1">
-              <li>Sinh viên chỉ được gửi đăng ký một lần. Vui lòng kiểm tra kỹ thông tin trước khi gửi.</li>
-              <li>Sau khi gửi, trạng thái đăng ký sẽ được cập nhật trong mục "Project Registration".</li>
-            </ul>
+          <div className=" mt-6 p-4 bg-blue-50 border border-blue-100 rounded-lg flex items-start gap-3">
+            <i className="fa-solid fa-circle-info text-blue-500 mt-0.5"></i>
+            <div>
+              <h4 className="font-bold text-blue-800 text-sm">Lưu ý quan trọng</h4>
+              <ul className="list-disc list-inside text-xs text-blue-700 mt-2 space-y-1">
+                <li>Sinh viên chỉ được gửi đăng ký một lần. Vui lòng kiểm tra kỹ thông tin trước khi gửi.</li>
+                <li>Sau khi gửi, trạng thái đăng ký sẽ được cập nhật trong mục "Project Registration".</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
-
-      <footer className="mt-8 border-t border-gray-200 pt-4 flex justify-between items-center text-xs text-gray-500 pb-2 px-6">
-        <p>© 2025 Thesis Portal - Hệ thống Quản lý Luận văn Tốt nghiệp</p>
-        <p>Phiên bản 2.1.0 · Hỗ trợ: <a className="text-primary hover:underline" href="mailto:support@thesisportal.edu.vn">support@thesisportal.edu.vn</a></p>
-      </footer>
     </main>
   );
 }
 
 function TopicSuggestionGroup({ aspirationLabel, badgeVariant, lecturer, topics, onSelect, onViewDetail }: any) {
   return (
-    <div>
-      <div className="flex items-center gap-2 mb-3">
+    <div className="flex flex-col rounded-xl border border-gray-100 bg-gray-50/40 p-3 min-h-0">
+      <div className="flex items-center gap-2 mb-3 px-1 shrink-0">
         <Badge variant={badgeVariant}>{aspirationLabel}</Badge>
-        <span className="text-xs text-gray-400">
+        <span className="text-xs text-gray-400 truncate">
           Giảng viên: <span className="font-medium text-gray-600">{lecturer?.full_name || '—'}</span>
         </span>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-3 overflow-y-auto max-h-[420px] pr-1">
         {topics.map((topic: any) => (
           <TopicCard
             key={topic.id}
@@ -576,6 +579,15 @@ function TopicCard({ topic, lecturer, onSelect, onViewDetail }: any) {
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function EmptyAdvisorSlot({ label }: { label: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center text-center rounded-xl border border-dashed border-gray-200 bg-gray-50/30 p-6 min-h-[140px]">
+      <i className="fa-regular fa-folder-open text-gray-300 text-xl mb-2" />
+      <p className="text-xs text-gray-400">{label} chưa có đề tài gợi ý</p>
     </div>
   );
 }

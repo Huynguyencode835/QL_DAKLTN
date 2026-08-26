@@ -2,7 +2,7 @@ import type { ReactNode, ElementType } from 'react';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success';
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
-export type BadgeVariant = 'neutral' | 'primary' | 'success' | 'warning' | 'danger' | 'info';
+export type BadgeVariant = 'neutral' | 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'violet' | 'indigo' | 'cyan' | 'teal' | 'pink' | 'rose';
 export type CardVariant = 'soft' | 'elevated' | 'outline';
 export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
@@ -22,7 +22,7 @@ export interface ButtonProps {
 }
 
 export interface CardProps {
-  children: ReactNode;
+  children?: ReactNode;
   title?: string;
   description?: string;
   icon?: string;

@@ -9,7 +9,7 @@ const menuConfig: Record<string, any> = {
     {
       group: 'Quản lý',
       items: [
-        { label: 'Quản lý tiến độ', icon: 'fa-chart-line', path: '/' },
+        { label: 'Trang chủ', icon: 'fa-house', path: '/' },
         { label: 'Đợt đồ án/khóa luận', icon: 'fa-chart-line', path: '/period' },
         { label: 'Đăng ký đồ án & khóa luận', icon: 'fa-file-contract', path: '/topic-registration' },
         { label: 'Nộp báo cáo', icon: 'fa-cloud-arrow-up', path: '/reports' },
@@ -22,6 +22,7 @@ const menuConfig: Record<string, any> = {
     {
       group: 'Giảng dạy',
       items: [
+        { label: 'Trang chủ', icon: 'fa-house', path: '/' },
         { label: 'Đợt đồ án/khóa luận', icon: 'fa-chart-line', path: '/period' },
         { label: 'Quản lý danh sách sinh viên', icon: 'fa-users', path: '/students' },
         { label: 'Quản lý đăng ký đề tài', icon: 'fa-list-check', path: '/topic-management' },
@@ -42,8 +43,10 @@ const menuConfig: Record<string, any> = {
     {
       group: 'Quản lý',
       items: [
+        { label: 'Trang chủ', icon: 'fa-house', path: '/' },
         { label: 'Danh sách sinh viên & đăng ký', icon: 'fa-users', path: '/students' },
         { label: 'Quản lý đợt đăng ký', icon: 'fa-folder-tree', path: '/registration-periods' },
+        { label: 'Tổng quan báo cáo', icon: 'fa-calendar-days', path: '/reports-management' },
       ],
     },
     { group: 'Kết quả', items: [{ label: 'Điều chỉnh điểm', icon: 'fa-sliders', path: '/manage-grades' }] },

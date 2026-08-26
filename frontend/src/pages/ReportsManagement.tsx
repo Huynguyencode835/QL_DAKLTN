@@ -2,17 +2,20 @@ import { useState, useEffect } from "react";
 import { endpoints } from "../config/Apis";
 import { fetchWithAuth } from "../utils/ApiHelper";
 import FilterBar from "../components/FilterBar";
-import { RegistrationPeriod, ReportEntry, ReportTableData, Schedules } from "../types";
+import { RegistrationPeriod, ReportTableData, Schedules, StudentReportRow } from "../types";
 import Badge from "../components/Ui/Badge";
-import Button from "../components/Ui/Button";
 import GenericTable, { TableColumn } from "../components/GenericTable";
-import { useReportDetail, useSearch } from "../hooks";
+import Pagination from "../components/Ui/Pagination";
+import { useReportDetail, useSearch, useUser, usePagination } from "../hooks";
 
 const EMPTY_MATRIX: ReportTableData = { columns: [], rows: [] };
 
 export default function ReportsManagement() {
     const { openDetail, detailLoading } = useReportDetail();
     const { search, setSearch, searchParams } = useSearch();
+    const { user } = useUser();
+    const role = user?.role || user?.user_type || 'lecturer';
+    const isLecturer = role === 'lecturer';
     const [selectedPeriodId, setSelectedPeriodId] = useState<string>('current');
     const [periodsLoading, setPeriodsLoading] = useState(true);
     const [registrationPeriods, setRegistrationPeriods] = useState<RegistrationPeriod[]>([]);
@@ -23,6 +26,9 @@ export default function ReportsManagement() {
 
 
     const [reportsMatrix, setReportsMatrix] = useState<ReportTableData>(EMPTY_MATRIX);
+    const [totalCount, setTotalCount] = useState(0);
+    const { currentPage, pageSize, resetPage, paginationParams, paginationProps: _paginationProps } = usePagination();
+    const paginationProps = { ..._paginationProps, totalCount };
 
     const loadPeriods = async () => {
         await fetchWithAuth(
@@ -44,40 +50,39 @@ export default function ReportsManagement() {
         );
     };
 
-    const loadReportsMatrix = async () => {
+    const loadReportsMatrix = async (scheduleId?: string) => {
+        const params: any = { ...paginationParams, ...searchParams };
+        if (scheduleId && scheduleId !== 'default') {
+            params.schedule = scheduleId;
+        }
         await fetchWithAuth(
             endpoints.reportMatrix(selectedPeriodId),
-            (data: ReportTableData) => setReportsMatrix(data),
+            (data: ReportTableData & { count?: number }) => {
+                setReportsMatrix({ columns: data.columns, rows: data.rows });
+                if (typeof data.count === 'number') setTotalCount(data.count);
+            },
             (err: any) => console.error('Lỗi tải bảng báo cáo:', err),
-            { ...searchParams },
+            params,
             setLoading
         );
     };
 
     useEffect(() => {
         loadPeriods();
+        if (isLecturer) loadSchedules();
     }, []);
 
     useEffect(() => {
-        Promise.all([
-            loadSchedules(),
-            loadReportsMatrix(),
-        ]);
-    }, [selectedPeriodId, searchParams]);
+        resetPage();
+    }, [selectedPeriodId, selectedScheduleId, searchParams]);
 
-    function statusBadge(entry: ReportEntry | undefined) {
-        if (!entry) return <span className="text-gray-300">—</span>;
-        switch (entry.status) {
-            case 'submitted':
-                return <Badge variant="success" dot>Đã nộp</Badge>;
-            case 'approved':
-                return <Badge variant="success" dot>Đã duyệt</Badge>;
-            case 'rejected':
-                return <Badge variant="danger" dot>Từ chối</Badge>;
-            default:
-                return <Badge variant="neutral" dot>Chưa nộp</Badge>;
-        }
-    }
+    useEffect(() => {
+        if (isLecturer) loadSchedules();
+    }, [selectedPeriodId]);
+
+    useEffect(() => {
+        loadReportsMatrix(selectedScheduleId);
+    }, [selectedPeriodId, searchParams, selectedScheduleId, paginationParams.page]);
 
     const columns: TableColumn<StudentReportRow>[] = [
         {
@@ -103,21 +108,32 @@ export default function ReportsManagement() {
                 render: (row) => {
                     const entry = row.reports[col.key];
                     if (!entry) return <span className="text-gray-300">—</span>;
+                    const variantMap: Record<string, string> = {
+                        submitted: 'success',
+                        approved: 'success',
+                        rejected: 'danger',
+                    };
+                    const labelMap: Record<string, string> = {
+                        submitted: 'Đã nộp',
+                        approved: 'Đã duyệt',
+                        rejected: 'Từ chối',
+                    };
+                    const v = variantMap[entry.status] || 'neutral';
+                    const l = labelMap[entry.status] || 'Chưa nộp';
                     return (
-                        <div className="flex items-center justify-center gap-2">
-                            {statusBadge(entry)}
+                        <Badge variant={v as any} dot className="gap-1.5">
+                            {l}
                             {entry.report_id != null && (
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    icon="fa-solid fa-eye"
-                                    loading={detailLoading}
+                                <button
+                                    className="ml-0.5 text-inherit opacity-60 hover:opacity-100 transition-opacity"
                                     disabled={detailLoading}
                                     onClick={() => openDetail(entry.report_id!)}
                                     aria-label="Chi tiết báo cáo"
-                                />
+                                >
+                                    <i className="fa-solid fa-eye text-[10px]" />
+                                </button>
                             )}
-                        </div>
+                        </Badge>
                     );
                 },
             })
@@ -147,7 +163,7 @@ export default function ReportsManagement() {
                                 })),
                             ],
                         },
-                        {
+                        ...(isLecturer ? [{
                             key: 'schedule',
                             value: selectedScheduleId,
                             onChange: setSelectedScheduleId,
@@ -155,18 +171,19 @@ export default function ReportsManagement() {
                             loading: schedulesLoading,
                             widthClassName: 'w-full sm:w-64',
                             options: [
-                                { value: 'defaul', label: 'Tổng quan' },
+                                { value: 'default', label: 'Tổng quan' },
                                 ...schedules.map((p) => ({
                                     value: String(p.id),
                                     label: `Lần ${p.sequence_number}${p.title ? `: ${p.title}` : ''}`,
                                 })),
                             ],
-                        },
+                        }] : []),
                     ]}
-                    onRefresh={loadReportsMatrix}
+                    onRefresh={() => loadReportsMatrix(selectedScheduleId)}
                     refreshLoading={loading}
                 />
                 <GenericTable rows={reportsMatrix.rows} columns={columns} rowKey={(row) => row.id} />
+                <Pagination {...paginationProps} />
             </div>
         </main>
     );

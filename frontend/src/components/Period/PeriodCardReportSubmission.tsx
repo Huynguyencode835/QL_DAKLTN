@@ -32,6 +32,7 @@ export default function PeriodCardReportSubmission() {
       </div>
 
       <PeriodCardCountdown
+        isAction = {isActive}
         days={daysLeft(end)}
         sub="cho đến hạn nộp"
         bg={isActive ? 'bg-red-50' : 'bg-gray-100'}

@@ -66,7 +66,7 @@ export default function ListStudentsAndRegistration() {
   useEffect(() => {
     loadPeriods();
     if (isStaff) {
-      fetchWithAuth(endpoints.lecturers, setLecturers, () => {}, {}, () => {});
+      fetchWithAuth(endpoints.lecturers, setLecturers, () => { }, {}, () => { });
       loadSpecializaion();
     }
   }, []);
@@ -86,14 +86,14 @@ export default function ListStudentsAndRegistration() {
     await fetchWithAuth(
       endpoints.registrationPeriods,
       (data: RegistrationPeriod[]) => setRegistrationPeriods(data),
-      () => {},
+      () => { },
       {},
       () => setPeriodsLoading(false)
     );
   };
 
   const loadSpecializaion = async () => {
-    await fetchWithAuth(endpoints.specialization, (data: Specialization[]) => setSpecialization(data), () => {}, {}, () => {});
+    await fetchWithAuth(endpoints.specialization, (data: Specialization[]) => setSpecialization(data), () => { }, {}, () => { });
   };
 
   const loadRegistrations = async () => {
@@ -104,7 +104,7 @@ export default function ListStudentsAndRegistration() {
       (data: Registration[], paginatedData?: { count: number }) => {
         setRegistrations(handlePaginatedResponse(data, paginatedData));
       },
-      () => {},
+      () => { },
       { ...paginationParams, ...searchParams, status: statusFilter || undefined },
       () => setLoading(false)
     );
@@ -366,17 +366,17 @@ export default function ListStudentsAndRegistration() {
       render: (reg) => (
         <div className="flex items-center justify-end gap-2">
           {isStaff && !reg.lecturer_assignments?.some((a) => a.role === 'main') &&
-  (reg.status === 'waiting_staff_assignment' ||
-    (reg.status === 'waiting_lecturer' && !reg.wants_thesis_upgrade)) && (
-            <Button
-              variant="primary"
-              size="sm"
-              icon="fa-solid fa-chalkboard-user"
-              onClick={() => { setAssigningReg(reg); setSelectedLecturer(''); }}
-            >
-              Phân GVHD
-            </Button>
-          )}
+            (reg.status === 'waiting_staff_assignment' ||
+              (reg.status === 'waiting_lecturer' && !reg.wants_thesis_upgrade)) && (
+              <Button
+                variant="primary"
+                size="sm"
+                icon="fa-solid fa-chalkboard-user"
+                onClick={() => { setAssigningReg(reg); setSelectedLecturer(''); }}
+              >
+                Phân GVHD
+              </Button>
+            )}
           <Button variant="outline" size="sm" icon="fa-regular fa-eye" onClick={() => openDetailModal(reg)}>
             Chi tiết
           </Button>
@@ -416,9 +416,8 @@ export default function ListStudentsAndRegistration() {
               options: [
                 { value: 'all', label: 'Tất cả' },
                 { value: 'waiting_lecturer', label: 'Chờ phân GV' },
-                { value: 'assigned_lecturer', label: 'Chờ duyệt' },
                 { value: 'waiting_staff_assignment', label: 'Chờ giáo vụ phân công' },
-                { value: 'approved', label: 'Đã duyệt' },
+                { value: 'assigned_lecturer', label: 'Đã duyệt' },
               ],
             },
           ]}
@@ -451,17 +450,17 @@ export default function ListStudentsAndRegistration() {
           </Card>
         )}
 
-          {!selectedPeriodId ? (
-            <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-              <i className="fa-solid fa-calendar-week text-4xl mb-3"></i>
-              <p className="text-sm font-medium">Vui lòng chọn đợt đăng ký</p>
-            </div>
-          ) : loading ? (
-            <div className="flex items-center justify-center py-12">
-              <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
-            </div>
-          ) : (
-            <>
+        {!selectedPeriodId ? (
+          <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+            <i className="fa-solid fa-calendar-week text-4xl mb-3"></i>
+            <p className="text-sm font-medium">Vui lòng chọn đợt đăng ký</p>
+          </div>
+        ) : loading ? (
+          <div className="flex items-center justify-center py-12">
+            <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
+          </div>
+        ) : (
+          <>
             <GenericTable
               rows={registrations}
               columns={columns}
@@ -474,8 +473,8 @@ export default function ListStudentsAndRegistration() {
               onToggleSelectAll={toggleSelectAll}
             />
             <Pagination {...paginationProps} />
-            </>
-          )}
+          </>
+        )}
 
         {showCheckbox && (
           <div className="flex justify-between items-center gap-4 mt-2">

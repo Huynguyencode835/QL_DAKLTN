@@ -2,15 +2,15 @@ from rest_framework import serializers
 from theses.models import (
     PeriodicReportSchedule, ProjectRegistration, RegistrationLecturer, RegistrationPeriod,
 )
+from theses.serializeres.registrationPeriodSerializer import RegistrationPeriodBasicSerializer
 
 
 class PeriodicReportScheduleSerializer(serializers.ModelSerializer):
     sequence_number = serializers.IntegerField(read_only=True)
-
     class Meta:
         model = PeriodicReportSchedule
         fields = [
-            'id', 'sequence_number', 'title', 'deadline'
+            'id', 'sequence_number', 'title', 'deadline', 'registration_period'
         ]
         read_only_fields = ['id']
 
@@ -34,17 +34,17 @@ class PeriodicReportScheduleSerializer(serializers.ModelSerializer):
                 {'registration_period': 'Chỉ được chọn đợt đang hoạt động (chưa đóng).'}
             )
 
-        # window_start = period.student_registration_end
-        # window_end = period.report_submission_start
-        # if deadline < window_start or deadline > window_end:
-        #     raise serializers.ValidationError(
-        #         {
-        #             'deadline': (
-        #                 f'Deadline phải nằm trong thời gian thực hiện đồ án '
-        #                 f'({window_start:%Y-%m-%d %H:%M} → {window_end:%Y-%m-%d %H:%M}).'
-        #             )
-        #         }
-        #     )
+        window_start = period.student_registration_end
+        window_end = period.report_submission_start
+        if deadline < window_start or deadline > window_end:
+            raise serializers.ValidationError(
+                {
+                    'deadline': (
+                        f'Deadline phải nằm trong thời gian thực hiện đồ án '
+                        f'({window_start:%Y-%m-%d %H:%M} → {window_end:%Y-%m-%d %H:%M}).'
+                    )
+                }
+            )
 
         if instance:
             seq = instance.sequence_number

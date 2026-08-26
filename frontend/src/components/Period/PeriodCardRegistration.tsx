@@ -31,6 +31,7 @@ export default function PeriodCardRegistration({ hideAction = false }: { hideAct
       </div>
 
       <PeriodCardCountdown
+        isAction = {isActive}
         days={daysLeft(end)}
         sub="cho đến hạn đăng ký"
         bg={isActive ? 'bg-blue-50' : 'bg-gray-100'}

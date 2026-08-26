@@ -451,8 +451,8 @@ class PeriodicReportSchedule(BaseModel):
                 lecturer=self.lecturer, registration_period=self.registration_period,
             ).exclude(pk=self.pk).order_by('-sequence_number').first()
             self.sequence_number = (last.sequence_number + 1) if last else 1
-
-class Report(BaseModel):
+# 1 schedule - * report
+class Report(BaseModel): 
     class ReportType(models.TextChoices):
         PERIODIC = 'periodic', 'Báo cáo định kỳ'
         FINAL = 'final', 'Báo cáo cuối kỳ'

@@ -194,6 +194,7 @@ export default function TopicRegistration() {
     waiting_lecturer: { label: 'Chờ phân giảng viên', variant: 'warning' },
     assigned_lecturer: { label: 'Đã phân giảng viên', variant: 'info' },
   };
+  
   const APPROVAL_CONFIG: Record<string, { label: string; variant: string }> = {
     pending: { label: 'Chờ duyệt', variant: 'warning' },
     approved: { label: 'Đã duyệt', variant: 'success' },

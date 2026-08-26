@@ -16,7 +16,7 @@ export const DIFFICULTY_OPTIONS = [
 
 export const STATUS_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = {
   waiting_lecturer: { label: 'Chờ phân GV', variant: 'warning' },
-  assigned_lecturer: { label: 'Chờ duyệt', variant: 'info' },
+  assigned_lecturer: { label: 'Đã duyệt', variant: 'success' },
   waiting_staff_assignment: { label: 'Chờ giáo vụ phân công', variant: 'danger' },
   approved: { label: 'Đã duyệt', variant: 'success' },
   rejected: { label: 'Từ chối', variant: 'danger' },

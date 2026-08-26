@@ -1,3 +1,5 @@
+import { Info } from "lucide-react";
+
 interface PeriodCardRowProps {
   icon: string;
   label: string;
@@ -23,12 +25,35 @@ interface PeriodCardCountdownProps {
   labelColor: string;
   valueColor: string;
   subColor: string;
+  isAction: boolean;
 }
 
-export function PeriodCardCountdown({ days, sub, bg, labelColor, valueColor, subColor }: PeriodCardCountdownProps) {
+export function PeriodCardCountdown({
+  days,
+  sub,
+  bg,
+  labelColor,
+  valueColor,
+  subColor,
+  isAction,
+}: PeriodCardCountdownProps) {
+  if (!isAction) {
+    return (
+      <div className="mt-5 rounded-xl p-4 text-center bg-gray-100">
+        <div className="text-[10px] font-bold uppercase tracking-wider mb-1 text-gray-400">
+          Trạng thái
+        </div>
+        <div className="text-2xl font-bold text-gray-500">Chưa đến hạn</div>
+        <div className="text-[10px] mt-1 text-gray-400">{sub}</div>
+      </div>
+    );
+  }
+
   return (
     <div className={`mt-5 rounded-xl p-4 text-center ${bg}`}>
-      <div className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${labelColor}`}>Còn lại</div>
+      <div className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${labelColor}`}>
+        Còn lại
+      </div>
       <div className={`text-2xl font-bold ${valueColor}`}>{days} ngày</div>
       <div className={`text-[10px] mt-1 ${subColor}`}>{sub}</div>
     </div>
@@ -38,7 +63,7 @@ export function PeriodCardCountdown({ days, sub, bg, labelColor, valueColor, sub
 export function PeriodCardGuide({ message }: { message: string }) {
   return (
     <div className="mt-5 bg-gray-100 rounded-xl p-4 text-center">
-      <i className="fa-regular fa-circle-info text-gray-400 mb-1.5 block" />
+      <Info className="w-4 h-4 text-gray-400 mb-1.5 mx-auto" />
       <p className="text-gray-500 text-[11px] leading-relaxed">{message}</p>
     </div>
   );

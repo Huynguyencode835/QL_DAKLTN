@@ -6,7 +6,7 @@ from rest_framework.exceptions import PermissionDenied, NotFound
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from theses.models import PeriodicReportSchedule, Report, User
+from theses.models import PeriodicReportSchedule, Report, User,RegistrationPeriod
 from theses.permissions import CanCreateReport, IsLecturerRole
 from theses.serializeres.scheduleSerializer import PeriodicReportScheduleSerializer
 from theses.serializeres.reportsSerializer import (
@@ -33,10 +33,11 @@ class ScheduleViewSet(viewsets.ViewSet,
 
     def get_queryset(self):
         user = self.request.user
+
         qs = PeriodicReportSchedule.objects.filter(active=True).select_related(
             'registration_period', 'lecturer',
         ).prefetch_related('registrations')
-
+        
         if user.role == User.Role.LECTURER:
             qs = qs.filter(lecturer=user)
         elif user.role == User.Role.STUDENT:
@@ -57,8 +58,8 @@ class ScheduleViewSet(viewsets.ViewSet,
         if self.action in ('update', 'partial_update', 'destroy'):
             if obj.lecturer_id != self.request.user.id:
                 raise PermissionDenied('Chỉ giảng viên tạo lịch mới được sửa/xoá lịch này.')
-
         return obj
+            
 
     @action(detail=True, methods=['post'], url_path='report')
     def report(self, request, pk=None):

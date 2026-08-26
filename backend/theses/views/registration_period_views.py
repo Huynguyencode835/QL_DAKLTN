@@ -10,7 +10,7 @@ from rest_framework import serializers
 
 
 from theses.models import User, ProjectRegistration, RegistrationPeriod, RegistrationLecturer,PeriodicReportSchedule, Report
-from theses.paginators import ItemRegistration
+from theses.paginators import ItemRegistration, ReportMatrixPaginator
 from theses.permissions import (
     CanCreateRegistration, IsStaffRole,
     IsRegistrationOwnerOrStaff, IsLecturerOrStaff,
@@ -211,14 +211,15 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
         )
         return Response(s.data)
 
-    def _build_report_columns(self, period, lecturer=None):
+    def _build_report_columns(self, period, lecturer=None, key=None):
         schedules = []
         if lecturer is not None:
-            schedules = list(
-                PeriodicReportSchedule.objects
-                .filter(lecturer=lecturer, registration_period=period)
-                .order_by('sequence_number')
+            qs = PeriodicReportSchedule.objects.filter(
+                lecturer=lecturer, registration_period=period,
             )
+            if key:
+                qs = qs.filter(id=key)
+            schedules = list(qs.order_by('sequence_number'))
 
         periodic_columns = [
             {
@@ -235,7 +236,10 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
             'schedule_id': None,
             'deadline': period.report_submission_end,
         }
-        return periodic_columns + [final_column]
+        columns = periodic_columns
+        if not key:
+            columns = columns + [final_column]
+        return columns
 
     def _build_report_map(self, registrations, is_staff_view):
         reports = Report.objects.filter(registration_id__in=[r.id for r in registrations])
@@ -313,8 +317,9 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
             registrations = [registration]
 
         else:
+            keySchedule = request.query_params.get('schedule')
             lecturer = user
-            columns = self._build_report_columns(period, lecturer=lecturer)
+            columns = self._build_report_columns(period, lecturer=lecturer, key=keySchedule)
             registrations = list(self._approved_main_registrations_queryset(period, lecturer=lecturer))
 
         report_map = self._build_report_map(registrations, is_staff_view)
@@ -323,7 +328,13 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
             registrations, many=True,
             context={'columns': columns, 'report_map': report_map},
         )
-        return Response({'columns': columns, 'rows': serializer.data})
+
+        paginator = ReportMatrixPaginator()
+        request.columns = columns
+        page = paginator.paginate_queryset(serializer.data, request, view=self)
+        if page is not None:
+            return paginator.get_paginated_response(page)
+        return Response({'columns': columns, 'rows': serializer.data, 'count': len(serializer.data)})
 
     @action(methods=['GET', 'POST'], detail=True, url_path='schedules')
     def schedules(self, request, pk=None):

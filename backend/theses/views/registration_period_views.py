@@ -339,6 +339,7 @@ class RegistrationPeriodViewSet(viewsets.ViewSet,
     @action(methods=['GET', 'POST'], detail=True, url_path='schedules')
     def schedules(self, request, pk=None):
         period = self.get_object()
+        print(period)
 
         if request.method == 'POST':
             serializer = PeriodicReportScheduleSerializer(

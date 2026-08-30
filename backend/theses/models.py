@@ -210,7 +210,7 @@ class RegistrationPeriod(BaseModel):
     OPEN_STATUSES = [
         STATUS.SCHEDULED,
         STATUS.STUDENT_REGISTRATION,
-        STATUS.IN_PROGRESS,
+        STATUS.STUDENT_REGISTRATION,
         STATUS.REPORT_SUBMISSION,
     ]
 

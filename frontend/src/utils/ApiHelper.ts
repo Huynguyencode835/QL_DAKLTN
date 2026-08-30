@@ -1,11 +1,37 @@
 import Apis, { authApis, endpoints } from "../config/Apis";
 
+const extractErrorMessage = (errData: any): string => {
+    if (!errData) return "Yêu cầu không hợp lệ.";
+
+    if (typeof errData.detail === "string") {
+        return errData.detail;
+    }
+
+    if (Array.isArray(errData.non_field_errors) && errData.non_field_errors.length) {
+        return errData.non_field_errors[0];
+    }
+
+    if (typeof errData === "object") {
+        const firstKey = Object.keys(errData)[0];
+        const firstValue = errData[firstKey];
+
+        if (Array.isArray(firstValue) && firstValue.length) {
+            return firstValue[0];
+        }
+        if (typeof firstValue === "string") {
+            return firstValue;
+        }
+    }
+
+    return "Yêu cầu không hợp lệ.";
+};
+
 const handleError = (err: any, onError?: any) => {
     const status = err.response?.status;
     const errData = err.response?.data;
 
     if (status >= 400 && status < 500) {
-        onError?.("client", err.response?.data?.detail || "Yêu cầu không hợp lệ.", errData);
+        onError?.("client", extractErrorMessage(errData), errData);
     } else if (status >= 500) {
         onError?.("server", "Lỗi máy chủ. Vui lòng thử lại sau.");
     } else {

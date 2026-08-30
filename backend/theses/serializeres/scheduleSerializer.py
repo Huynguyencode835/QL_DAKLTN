@@ -7,6 +7,9 @@ from theses.serializeres.registrationPeriodSerializer import RegistrationPeriodB
 
 class PeriodicReportScheduleSerializer(serializers.ModelSerializer):
     sequence_number = serializers.IntegerField(read_only=True)
+    # Không nhận từ client nữa — luôn lấy từ context do view truyền vào
+    registration_period = serializers.PrimaryKeyRelatedField(read_only=True)
+
     class Meta:
         model = PeriodicReportSchedule
         fields = [
@@ -14,16 +17,20 @@ class PeriodicReportScheduleSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id']
 
+    def _get_period(self):
+        """Nguồn duy nhất lấy registration_period: context (view set vào),
+        fallback về instance.registration_period khi update."""
+        instance = self.instance
+        return self.context.get('registration_period') or (
+            instance.registration_period if instance else None
+        )
+
     def validate(self, attrs):
         instance = self.instance
         request = self.context.get('request')
 
         lecturer = instance.lecturer if instance else (request.user if request else None)
-        period = (
-            attrs.get('registration_period')
-            or self.context.get('registration_period')
-            or (instance.registration_period if instance else None)
-        )
+        period = self._get_period()
         deadline = attrs.get('deadline') or (instance.deadline if instance else None)
 
         if not (lecturer and period and deadline):
@@ -74,8 +81,11 @@ class PeriodicReportScheduleSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        lecturer = validated_data['lecturer']
-        period = validated_data['registration_period']
+        lecturer = self.context['request'].user
+        period = self._get_period()
+
+        validated_data['registration_period'] = period
+        validated_data['lecturer'] = lecturer
 
         last = PeriodicReportSchedule.objects.filter(
             lecturer=lecturer, registration_period=period,

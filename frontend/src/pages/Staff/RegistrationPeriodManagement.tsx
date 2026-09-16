@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
-import { useModal, usePageHeader, useToast } from '../../hooks';
-import { fetchWithAuth, createWithAuth } from '../../utils/ApiHelper';
+import { usePageHeader, useToast, useSearch } from '../../hooks';
+import { fetchWithAuth, createWithAuth, updatePatchWithAuth, deleteWithAuth } from '../../utils/ApiHelper';
 import { endpoints } from '../../config/Apis';
-import Card, { SectionCard } from '../../components/Ui/Card';
+import Card from '../../components/Ui/Card';
 import Button from '../../components/Ui/Button';
 import Badge from '../../components/Ui/Badge';
-import Input from '../../components/Ui/Input';
-import Select from '../../components/Ui/Select';
-import Modal from '../../components/Ui/Modal';
-import ItemCardGrid, { type ItemCard } from '../../components/Cards/ItemCardGrid';
-import type { BadgeVariant, RegistrationPeriod } from '../../types';
+import FilterBar from '../../components/FilterBar';
+import ConfirmModal from '../../components/Ui/ConfirmModal';
+import PeriodDetail from './PeriodDetail';
+import PeriodForm from './PeriodForm';
+import ThesisPeriodForm from './ThesisPeriodForm';
+import type { RegistrationPeriod } from '../../types';
 
-const PERIOD_STATUS_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = {
+const STATUS_CONFIG: Record<string, { label: string; variant: 'neutral' | 'primary' | 'info' | 'warning' | 'danger' }> = {
+  draft: { label: 'Nháp', variant: 'neutral' },
   scheduled: { label: 'Chờ mở đăng ký', variant: 'neutral' },
   student_registration: { label: 'Đang mở đăng ký', variant: 'primary' },
   in_progress: { label: 'Đang thực hiện đồ án', variant: 'info' },
@@ -20,335 +22,315 @@ const PERIOD_STATUS_CONFIG: Record<string, { label: string; variant: BadgeVarian
   archived: { label: 'Đã lưu trữ', variant: 'neutral' },
 };
 
-const PERIOD_CARD_STYLE: Record<string, string> = {
-  scheduled: 'bg-gray-50 hover:bg-gray-100',
-  student_registration: 'bg-blue-50 hover:bg-blue-100',
-  in_progress: 'bg-violet-50 hover:bg-violet-100',
-  report_submission: 'bg-amber-50 hover:bg-amber-100',
-  closed: 'bg-green-50 hover:bg-green-100',
-  archived: 'bg-gray-50 hover:bg-gray-100',
-};
-
-const PERIOD_ICON_STYLE: Record<string, string> = {
-  scheduled: 'bg-gray-200 text-gray-500',
-  student_registration: 'bg-blue-500 text-white',
-  in_progress: 'bg-violet-500 text-white',
-  report_submission: 'bg-amber-500 text-white',
-  closed: 'bg-green-500 text-white',
-  archived: 'bg-gray-200 text-gray-500',
-};
-
-const PERIOD_ICON: Record<string, string> = {
-  scheduled: 'fa-hourglass-half',
-  student_registration: 'fa-user-check',
-  in_progress: 'fa-spinner',
-  report_submission: 'fa-file-arrow-up',
-  closed: 'fa-lock',
-  archived: 'fa-box-archive',
-};
-
-const FORMAT_STATUS_OPTIONS = Object.entries(PERIOD_STATUS_CONFIG).map(([value, config]) => ({
-  value,
-  label: config.label,
-}));
-
-const emptyForm = {
-  name: '',
-  academic_year: '',
-  student_registration_start: '',
-  student_registration_end: '',
-  report_submission_start: '',
-  report_submission_end: '',
-  execution_duration_weeks: '10',
-  status: 'scheduled',
-};
-
 function formatDate(iso: string | undefined | null): string {
   if (!iso) return '—';
   const d = new Date(iso);
-  return d.toLocaleString('vi-VN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function toDatetimeLocal(iso: string | undefined | null): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function PeriodInfo({ icon, label, value }: { icon: string; label: string; value: any }) {
-  return (
-    <Card variant="soft" className="!p-3" bodyClassName="!p-0 flex items-center gap-3">
-      <span className="w-10 h-10 shrink-0 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-        <i className={`${icon} text-sm`}></i>
-      </span>
-      <div className="min-w-0">
-        <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">{label}</p>
-        <div className="text-sm font-semibold text-gray-800 truncate">{value || '—'}</div>
-      </div>
-    </Card>
-  );
+  return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    + ' ' + d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 }
 
 export default function RegistrationPeriodManagement() {
-  const { openModal, closeModal } = useModal();
   const toast = useToast();
+  const { search, setSearch, searchParams } = useSearch();
+
   const [periods, setPeriods] = useState<RegistrationPeriod[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ ...emptyForm });
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [detailPeriod, setDetailPeriod] = useState<RegistrationPeriod | null>(null);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [periodTypeFilter, setPeriodTypeFilter] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [formModalOpen, setFormModalOpen] = useState(false);
+  const [isCreatingThesis, setIsCreatingThesis] = useState(false);
+  const [thesisParentId, setThesisParentId] = useState<number | null>(null);
+
+  const [confirmState, setConfirmState] = useState<{
+    type: 'publish' | 'delete' | null;
+    id: number | null;
+  }>({ type: null, id: null });
 
   usePageHeader({
     title: 'Quản lý đợt đăng ký',
     description: 'Tạo và quản lý các đợt đăng ký đồ án / khóa luận tốt nghiệp.',
   });
 
-  useEffect(() => { loadPeriods(); }, []);
+  useEffect(() => { loadPeriods(); }, [periodTypeFilter]);
+
+  useEffect(() => {
+    if (selectedId !== null) loadDetailPeriod(selectedId);
+  }, [selectedId]);
 
   const loadPeriods = async () => {
-    await fetchWithAuth(endpoints.registrationPeriods, setPeriods, () => { }, {}, setLoading);
-  };
-
-  const update = (field: string) => (e: any) => {
-    setForm(prev => ({ ...prev, [field]: e.target?.value ?? e }));
-  };
-
-  const resetForm = () => setForm({ ...emptyForm });
-
-  const openCreateModal = () => {
-    resetForm();
-    setFormModalOpen(true);
-  };
-
-  const handleSubmit = async (e: any) => {
-    e.preventDefault();
-    setSubmitting(true);
-
-    const msPerDay = 24 * 60 * 60 * 1000;
-    const daysBetween = (from: string, to: string) => {
-      if (!from || !to) return undefined;
-      const diff = Math.ceil((new Date(to).getTime() - new Date(from).getTime()) / msPerDay);
-      return diff > 0 ? diff : undefined;
-    };
-
-    const body: Record<string, any> = {
-      name: form.name,
-      academic_year: form.academic_year,
-      student_registration_start: form.student_registration_start
-        ? new Date(form.student_registration_start).toISOString()
-        : null,
-      student_registration_days: daysBetween(form.student_registration_start, form.student_registration_end),
-      report_submission_days: daysBetween(form.report_submission_start, form.report_submission_end),
-      execution_duration_weeks: parseInt(form.execution_duration_weeks, 10),
-      status: form.status,
-    };
-
-    await createWithAuth(
-      endpoints.registrationPeriods,
-      body,
-      () => {
-        loadPeriods();
-        setFormModalOpen(false);
-        resetForm();
-        toast.success('Tạo đợt thành công', 'Đợt đăng ký đã được tạo');
-      },
-      (type: string, msg: string) => {
-        toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
-      },
-      setSubmitting,
-    );
+    const params: Record<string, string> = {};
+    if (periodTypeFilter) params.period_type = periodTypeFilter;
+    await fetchWithAuth(endpoints.registrationPeriods, setPeriods, () => {}, params, setLoading);
   };
 
   const loadDetailPeriod = async (id: number) => {
     await fetchWithAuth(
       endpoints.registrationPeriodDetail(id),
-      (data) => {
-        const status = PERIOD_STATUS_CONFIG[data.status] || PERIOD_STATUS_CONFIG.scheduled;
-        openModal({
-          title: data.name || 'Xem chi tiết',
-          description: `Trạng thái: ${status.label}`,
-          icon: 'fa-regular fa-file-lines',
-          size: 'lg',
-          content: (
-            <div className="space-y-5">
-              <Card
-                variant="soft"
-                className="!bg-primary/5 !border-primary/10 !p-4"
-                bodyClassName="!p-0 flex items-center justify-between gap-4"
-              >
-                <div className="min-w-0">
-                  <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Tên đợt</p>
-                  <p className="text-sm font-semibold text-gray-800 truncate">{data.name || '—'}</p>
-                </div>
-                <Badge variant={status.variant} dot>{status.label}</Badge>
-              </Card>
-
-              <SectionCard title="Thông tin chung" icon="fa-solid fa-circle-info">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <PeriodInfo icon="fa-solid fa-hashtag" label="ID" value={data.id} />
-                  <PeriodInfo icon="fa-solid fa-calendar-days" label="Năm học" value={data.academic_year} />
-                  <PeriodInfo icon="fa-solid fa-user" label="Người tạo" value={data.created_by} />
-                  <PeriodInfo icon="fa-solid fa-toggle-on" label="Đang hoạt động" value={data.active ? 'Có' : 'Không'} />
-                  <PeriodInfo icon="fa-regular fa-clock" label="Ngày tạo" value={formatDate(data.created_date)} />
-                  <PeriodInfo icon="fa-regular fa-clock" label="Cập nhật gần nhất" value={formatDate(data.updated_date)} />
-                </div>
-              </SectionCard>
-
-              <SectionCard title="Thời gian & tiến độ" icon="fa-solid fa-chart-line">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <PeriodInfo icon="fa-regular fa-calendar" label="Bắt đầu đăng ký" value={formatDate(data.student_registration_start)} />
-                  <PeriodInfo icon="fa-solid fa-calendar-check" label="Số ngày đăng ký" value={data.student_registration_days} />
-                  <PeriodInfo icon="fa-solid fa-file-arrow-up" label="Số ngày nộp báo cáo" value={data.report_submission_days} />
-                  <PeriodInfo icon="fa-solid fa-stopwatch" label="Số tuần thực hiện" value={data.execution_duration_weeks} />
-                </div>
-              </SectionCard>
-            </div>
-          ),
-          footer: (
-            <Button variant="outline" size="sm" onClick={closeModal}>Đóng</Button>
-          ),
-        });
-      }
+      (data: RegistrationPeriod) => setDetailPeriod(data),
+      () => {},
+      {},
     );
-  }
+  };
+
+  const filtered = periods.filter((p) => {
+    if (statusFilter && p.status !== statusFilter) return false;
+    if (periodTypeFilter && p.period_type !== periodTypeFilter) return false;
+    if (searchParams.search) {
+      const q = searchParams.search.toLowerCase();
+      if (!p.name.toLowerCase().includes(q) && !p.academic_year.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  const selectedPeriod = periods.find((p) => p.id === selectedId) || null;
+
+  const handleCreate = async (body: Record<string, any>) => {
+    setSubmitting(true);
+    await createWithAuth(
+      endpoints.registrationPeriods,
+      body,
+      (data: RegistrationPeriod) => {
+        setPeriods((prev) => [data, ...prev]);
+        setSelectedId(data.id);
+        setIsCreating(false);
+        toast.success('Tạo đợt thành công', `Đợt "${data.name}" đã được tạo.`);
+      },
+      (_type: string, msg: string) => {
+        toast.error('Lỗi', msg || 'Không thể tạo đợt.');
+      },
+      () => setSubmitting(false),
+    );
+  };
+
+  const handleEdit = async (body: Record<string, any>) => {
+    if (!editingId) return;
+    setSubmitting(true);
+    await updatePatchWithAuth(
+      endpoints.registrationPeriodDetail(editingId),
+      body,
+      (data: RegistrationPeriod) => {
+        setPeriods((prev) => prev.map((p) => (p.id === editingId ? data : p)));
+        setDetailPeriod(data);
+        setSelectedId(editingId);
+        setIsCreating(false);
+        setEditingId(null);
+        toast.success('Cập nhật thành công', `Đợt "${data.name}" đã được cập nhật.`);
+      },
+      (_type: string, msg: string) => {
+        toast.error('Lỗi', msg || 'Không thể cập nhật đợt.');
+      },
+      () => setSubmitting(false),
+    );
+  };
+
+  const handlePublish = async (id: number) => {
+    await createWithAuth(
+      endpoints.publishPeriod(id),
+      {},
+      (data: RegistrationPeriod) => {
+        setPeriods((prev) => prev.map((p) => (p.id === id ? data : p)));
+        setDetailPeriod(data);
+        toast.success('Công bố thành công', 'Đợt đăng ký đã chuyển sang trạng thái "Chờ mở đăng ký".');
+      },
+      (_type: string, msg: string) => {
+        toast.error('Lỗi', msg || 'Không thể công bố đợt.');
+      },
+    );
+  };
+
+  const handleDelete = async (id: number) => {
+    const p = periods.find((x) => x.id === id);
+    await deleteWithAuth(
+      endpoints.registrationPeriodDetail(id),
+      () => {
+        setPeriods((prev) => prev.filter((x) => x.id !== id));
+        if (selectedId === id) {
+          setSelectedId(null);
+          setDetailPeriod(null);
+        }
+        toast.success('Đã xoá', `Đợt "${p?.name}" đã bị xoá.`);
+      },
+      (_type: string, msg: string) => {
+        toast.error('Lỗi', msg || 'Không thể xoá đợt.');
+      },
+    );
+  };
+
+  const handleCreateThesis = async (body: Record<string, any>) => {
+    if (!thesisParentId) return;
+    setSubmitting(true);
+    await createWithAuth(
+      endpoints.createThesis(thesisParentId),
+      body,
+      (data: RegistrationPeriod) => {
+        setPeriods((prev) => [data, ...prev]);
+        setSelectedId(data.id);
+        setIsCreatingThesis(false);
+        setThesisParentId(null);
+        toast.success('Tạo đợt khóa luận thành công', `Đợt "${data.name}" đã được tạo.`);
+      },
+      (_type: string, msg: string) => {
+        toast.error('Lỗi', msg || 'Không thể tạo đợt khóa luận.');
+      },
+      () => setSubmitting(false),
+    );
+  };
+
+  const handleConfirm = () => {
+    if (confirmState.type === 'publish' && confirmState.id) handlePublish(confirmState.id);
+    if (confirmState.type === 'delete' && confirmState.id) handleDelete(confirmState.id);
+    setConfirmState({ type: null, id: null });
+  };
 
   return (
     <div className="space-y-6">
-      <div className="mx-auto w-full space-y-6">
-        <div className="flex items-center justify-end">
-          <Button variant="primary" icon="fa-solid fa-plus" onClick={openCreateModal}>
+      <FilterBar
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Tìm kiếm tên đợt, năm học..."
+        dropdowns={[
+          {
+            key: 'periodType',
+            value: periodTypeFilter,
+            onChange: (v) => setPeriodTypeFilter(v === 'all' ? '' : v),
+            placeholder: 'Tất cả loại đợt',
+            widthClassName: 'w-full sm:w-48',
+            options: [
+              { value: 'all', label: 'Tất cả' },
+              { value: 'project', label: 'Đợt đồ án' },
+              { value: 'thesis', label: 'Đợt khóa luận' },
+            ],
+          },
+          {
+            key: 'status',
+            value: statusFilter,
+            onChange: (v) => setStatusFilter(v === 'all' ? '' : v),
+            placeholder: 'Tất cả trạng thái',
+            widthClassName: 'w-full sm:w-56',
+            options: [
+              { value: 'all', label: 'Tất cả' },
+              { value: 'draft', label: 'Nháp' },
+              { value: 'scheduled', label: 'Chờ mở đăng ký' },
+              { value: 'student_registration', label: 'Đang mở đăng ký' },
+              { value: 'in_progress', label: 'Đang thực hiện' },
+              { value: 'report_submission', label: 'Đang nhận báo cáo' },
+              { value: 'closed', label: 'Đã đóng' },
+            ],
+          },
+        ]}
+        onRefresh={loadPeriods}
+        refreshLoading={loading}
+        actions={
+          <Button variant="primary" icon="fa-solid fa-plus" onClick={() => { setIsCreating(true); setSelectedId(null); setEditingId(null); }}>
             Tạo đợt mới
           </Button>
+        }
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
+        {/* LEFT PANEL */}
+        <div className="lg:col-span-3">
+          <Card variant="elevated" icon="fa-solid fa-calendar-days" title={`Đợt đăng ký (${filtered.length})`}>
+            <div className="space-y-2 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
+              {filtered.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-4">Không có đợt đăng ký nào</p>
+              ) : (
+                filtered.map((p) => {
+                  const isSelected = selectedId === p.id && !isCreating;
+                  const cfg = STATUS_CONFIG[p.status || 'draft'] || STATUS_CONFIG.draft;
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => { setSelectedId(p.id); setIsCreating(false); setEditingId(null); }}
+                      className={`p-3 rounded-xl cursor-pointer border transition-all duration-150 ${
+                        isSelected
+                          ? 'border-primary bg-primary/5 ring-1 ring-primary/20 shadow-sm'
+                          : 'border-gray-100 hover:bg-gray-50 hover:border-gray-200'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium text-gray-800 line-clamp-2 leading-snug">{p.name}</div>
+                          <div className="text-xs text-gray-400 mt-1.5 flex items-center gap-1">
+                            <i className="fa-solid fa-calendar-days"></i>
+                            {p.academic_year}
+                          </div>
+                          {p.student_registration_start && (
+                            <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                              <i className="fa-regular fa-calendar"></i>
+                              {formatDate(p.student_registration_start)}
+                            </div>
+                          )}
+                        </div>
+                        <Badge variant={cfg.variant} className="shrink-0 text-[10px]">{cfg.label}</Badge>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </Card>
         </div>
 
-        <ItemCardGrid
-          items={periods.map((p): ItemCard => {
-            const key = p.status && PERIOD_STATUS_CONFIG[p.status] ? p.status : 'scheduled';
-            const status = PERIOD_STATUS_CONFIG[key];
-            return {
-              id: p.id,
-              title: p.name,
-              subtitle: p.academic_year,
-              icon: PERIOD_ICON[key],
-              iconClassName: PERIOD_ICON_STYLE[key],
-              cardClassName: PERIOD_CARD_STYLE[key],
-              badge: { label: status.label, variant: status.variant },
-              onClick: () => loadDetailPeriod(p.id),
-            };
-          })}
-          loading={loading}
-          emptyText="Chưa có đợt đăng ký nào"
-          emptyIcon="fa-calendar-circle-plus"
-        />
+        {/* RIGHT PANEL */}
+        <div className="lg:col-span-7">
+          {isCreatingThesis && thesisParentId ? (
+            <ThesisPeriodForm
+              parentPeriod={detailPeriod}
+              onSubmit={handleCreateThesis}
+              onCancel={() => { setIsCreatingThesis(false); setThesisParentId(null); }}
+              loading={submitting}
+            />
+          ) : isCreating ? (
+            <PeriodForm
+              mode={editingId ? 'edit' : 'create'}
+              initialValues={editingId ? detailPeriod || undefined : undefined}
+              onSubmit={editingId ? handleEdit : handleCreate}
+              onCancel={() => { setIsCreating(false); setEditingId(null); }}
+              loading={submitting}
+            />
+          ) : !selectedPeriod ? (
+            <div className="flex flex-col items-center justify-center py-20 text-gray-400 bg-white rounded-2xl border border-gray-100 shadow-sm">
+              <i className="fa-regular fa-hand-pointer text-5xl mb-4"></i>
+              <p className="text-sm font-medium">Chọn một đợt đăng ký từ danh sách bên trái</p>
+              <p className="text-xs text-gray-300 mt-1">hoặc bấm "Tạo đợt mới" để tạo mới</p>
+            </div>
+          ) : (
+            <PeriodDetail
+              period={detailPeriod ?? selectedPeriod}
+              onPublish={(id) => setConfirmState({ type: 'publish', id })}
+              onDelete={(id) => setConfirmState({ type: 'delete', id })}
+              onEdit={(id) => {
+                setEditingId(id);
+                setIsCreating(true);
+              }}
+              onCreateThesis={(id) => {
+                setThesisParentId(id);
+                setIsCreatingThesis(true);
+              }}
+            />
+          )}
+        </div>
       </div>
 
-      <Modal
-        open={formModalOpen}
-        onClose={() => setFormModalOpen(false)}
-        title="Tạo đợt đăng ký mới"
-        description="Điền thông tin đợt đăng ký đồ án / khóa luận"
-        icon="fa-solid fa-calendar-plus"
-        size="lg"
-      >
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Input
-              label="Tên đợt"
-              required
-              placeholder="VD: Đợt 1 - Học kỳ 2"
-              value={form.name}
-              onChange={update('name')}
-            />
-            <Input
-              label="Năm học"
-              required
-              placeholder="VD: 2024-2025"
-              value={form.academic_year}
-              onChange={update('academic_year')}
-            />
-          </div>
-
-          <div className="border-t border-gray-100 pt-6">
-            <h4 className="font-semibold text-gray-800 text-sm mb-4 flex items-center gap-2">
-              <i className="fa-solid fa-user-check text-primary"></i>
-              Thời gian đăng ký
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Input
-                label="Bắt đầu đăng ký"
-                required
-                type="datetime-local"
-                value={form.student_registration_start}
-                onChange={update('student_registration_start')}
-              />
-              <Input
-                label="Kết thúc đăng ký"
-                required
-                type="datetime-local"
-                value={form.student_registration_end}
-                onChange={update('student_registration_end')}
-              />
-            </div>
-          </div>
-
-          <div className="border-t border-gray-100 pt-6">
-            <h4 className="font-semibold text-gray-800 text-sm mb-4 flex items-center gap-2">
-              <i className="fa-solid fa-file-arrow-up text-primary"></i>
-              Thời gian nộp báo cáo
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Input
-                label="Bắt đầu nộp báo cáo"
-                required
-                type="datetime-local"
-                value={form.report_submission_start}
-                onChange={update('report_submission_start')}
-              />
-              <Input
-                label="Kết thúc nộp báo cáo"
-                required
-                type="datetime-local"
-                value={form.report_submission_end}
-                onChange={update('report_submission_end')}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Input
-              label="Số tuần thực hiện"
-              type="number"
-              min={1}
-              max={52}
-              value={form.execution_duration_weeks}
-              onChange={update('execution_duration_weeks')}
-              helperText="Tính từ khi đăng ký được duyệt"
-            />
-            <Select
-              label="Trạng thái"
-              value={form.status}
-              onChange={update('status')}
-              options={FORMAT_STATUS_OPTIONS}
-            />
-          </div>
-
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
-            <Button variant="outline" size="sm" onClick={() => setFormModalOpen(false)}>
-              Hủy
-            </Button>
-            <Button type="submit" size="sm" icon="fa-solid fa-check" loading={submitting} disabled={submitting}>
-              Tạo đợt
-            </Button>
-          </div>
-        </form>
-      </Modal>
+      <ConfirmModal
+        open={confirmState.type !== null}
+        title={confirmState.type === 'publish' ? 'Công bố đợt đăng ký' : 'Xoá đợt đăng ký'}
+        description={
+          confirmState.type === 'publish'
+            ? 'Đợt đăng ký sẽ chuyển sang trạng thái "Chờ mở đăng ký". Bạn có chắc muốn công bố?'
+            : 'Bạn có chắc muốn xoá đợt đăng ký này? Hành động này không thể hoàn tác.'
+        }
+        icon={confirmState.type === 'publish' ? 'fa-solid fa-bullhorn' : 'fa-solid fa-trash'}
+        confirmLabel={confirmState.type === 'publish' ? 'Công bố' : 'Xoá'}
+        confirmVariant={confirmState.type === 'publish' ? 'primary' : 'danger'}
+        onConfirm={handleConfirm}
+        onCancel={() => setConfirmState({ type: null, id: null })}
+      />
     </div>
   );
 }

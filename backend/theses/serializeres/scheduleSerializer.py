@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.utils import timezone
 from theses.models import (
     PeriodicReportSchedule, ProjectRegistration, RegistrationLecturer, RegistrationPeriod,
 )
@@ -35,6 +36,11 @@ class PeriodicReportScheduleSerializer(serializers.ModelSerializer):
 
         if not (lecturer and period and deadline):
             return attrs
+
+        if deadline < timezone.now():
+            raise serializers.ValidationError(
+                {'deadline': 'Hạn nộp không được ở quá khứ.'}
+            )
 
         if not period.active or period.status not in RegistrationPeriod.OPEN_STATUSES:
             raise serializers.ValidationError(

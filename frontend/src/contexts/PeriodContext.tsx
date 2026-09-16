@@ -4,7 +4,8 @@ import { endpoints } from '../config/Apis';
 import type { Period } from '../types';
 
 interface PeriodContextValue {
-  period: Period | null;
+  projectPeriod: Period | null;
+  thesisPeriod: Period | null;
   loading: boolean;
   refetch: () => void;
 }
@@ -12,16 +13,27 @@ interface PeriodContextValue {
 const PeriodContext = createContext<PeriodContextValue | undefined>(undefined);
 
 export function PeriodProvider({ children }: { children: ReactNode }) {
-  const [period, setPeriod] = useState<Period | null>(null);
+  const [projectPeriod, setProjectPeriod] = useState<Period | null>(null);
+  const [thesisPeriod, setThesisPeriod] = useState<Period | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
+    let count = 0;
+    const done = () => { count += 1; if (count >= 2) setLoading(false); };
+
     fetchWithAuth(
-      endpoints.registrationPeriodDetail('current'),
-      (data: Period) => setPeriod(data),
-      () => setPeriod(null),
+      endpoints.registrationPeriodDetail('current-project'),
+      (data: Period) => setProjectPeriod(data),
+      () => setProjectPeriod(null),
       {},
-      setLoading,
+      (v) => { if (!v) done(); },
+    );
+    fetchWithAuth(
+      endpoints.registrationPeriodDetail('current-thesis'),
+      (data: Period) => setThesisPeriod(data),
+      () => setThesisPeriod(null),
+      {},
+      (v) => { if (!v) done(); },
     );
   }, []);
 
@@ -30,7 +42,7 @@ export function PeriodProvider({ children }: { children: ReactNode }) {
   }, [load]);
 
   return (
-    <PeriodContext.Provider value={{ period, loading, refetch: load }}>
+    <PeriodContext.Provider value={{ projectPeriod, thesisPeriod, loading, refetch: load }}>
       {children}
     </PeriodContext.Provider>
   );

@@ -1,11 +1,11 @@
 import { useNavigate } from 'react-router-dom';
 import { useUser, usePageHeader, usePeriod } from '../hooks';
-import { STATUS_CONFIG_PERIOD, SCHEDULED_CONFIG } from '../types';
+import { STATUS_CONFIG_PERIOD, SCHEDULED_CONFIG, ROLE_ACTION_CONFIG } from '../types';
 import PeriodCardRegistration from '../components/Period/PeriodCardRegistration';
 import PeriodCardInProgress from '../components/Period/PeriodCardInProgress';
 import PeriodCardReportSubmission from '../components/Period/PeriodCardReportSubmission';
 import PeriodCardClosed from '../components/Period/PeriodCardClosed';
-import { formatPeriodDateTime, daysLeft, studentRegistrationEnd, reportSubmissionEnd } from '../utils/periodUtils';
+import { formatPeriodDateTime, studentRegistrationEnd, reportSubmissionEnd } from '../utils/periodUtils';
 
 interface FeatureCard {
   id: string;
@@ -102,6 +102,15 @@ const featureCards: Record<string, FeatureCard[]> = {
       iconColor: 'text-rose-600',
       path: '/grades-and-results',
     },
+    {
+      id: 'my-committees',
+      title: 'Hội đồng tham gia',
+      description: 'Xem danh sách hội đồng phản biện bạn tham gia.',
+      icon: 'fa-solid fa-people-group',
+      iconBg: 'bg-cyan-100',
+      iconColor: 'text-cyan-600',
+      path: '/my-committees',
+    },
   ],
   staff: [
     {
@@ -130,6 +139,33 @@ const featureCards: Record<string, FeatureCard[]> = {
       iconBg: 'bg-amber-100',
       iconColor: 'text-amber-600',
       path: '/period',
+    },
+    {
+      id: 'manage-committees',
+      title: 'Quản lý hội đồng',
+      description: 'Tạo và quản lý các hội đồng phản biện, bảo vệ đồ án.',
+      icon: 'fa-solid fa-people-group',
+      iconBg: 'bg-cyan-100',
+      iconColor: 'text-cyan-600',
+      path: '/manage-committees',
+    },
+    {
+      id: 'reports-management',
+      title: 'Tổng quan báo cáo',
+      description: 'Xem tổng quan báo cáo định kỳ của sinh viên.',
+      icon: 'fa-solid fa-calendar-days',
+      iconBg: 'bg-amber-100',
+      iconColor: 'text-amber-600',
+      path: '/reports-management',
+    },
+    {
+      id: 'manage-grades',
+      title: 'Điều chỉnh điểm',
+      description: 'Quản lý và điều chỉnh điểm đánh giá đồ án/khóa luận.',
+      icon: 'fa-solid fa-sliders',
+      iconBg: 'bg-rose-100',
+      iconColor: 'text-rose-600',
+      path: '/manage-grades',
     },
   ],
 };
@@ -176,7 +212,7 @@ function PeriodActiveBanner({ period }: { period: NonNullable<ReturnType<typeof 
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+    <div className="lg:col-span-6 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
       <div className="px-5 py-3 border-l-4 border-blue-600 bg-blue-50/40 flex items-center gap-2">
         <i className="fa-solid fa-file-invoice text-blue-600 text-xs" />
         <span className="text-[11px] font-semibold tracking-wide text-blue-700 uppercase">
@@ -246,7 +282,8 @@ function PeriodActiveBanner({ period }: { period: NonNullable<ReturnType<typeof 
 export default function Home() {
   const navigate = useNavigate();
   const { user } = useUser();
-  const { period, loading: periodLoading } = usePeriod();
+  const { projectPeriod, thesisPeriod, loading: periodLoading } = usePeriod();
+  const period = projectPeriod || thesisPeriod;
 
   usePageHeader({
     title: 'Trang chủ',
@@ -291,7 +328,38 @@ export default function Home() {
           <i className="fa-solid fa-circle-notch animate-spin text-blue-600 text-2xl" />
         </div>
       ) : period ? (
-        <PeriodActiveBanner period={period} />
+        <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
+          <PeriodActiveBanner period={period} />
+          <div className="lg:col-span-4 grid grid-cols-1 gap-4">
+            {period.status === 'student_registration' && (
+              <PeriodCardRegistration action={(() => {
+                const a = ROLE_ACTION_CONFIG[role]?.student_registration;
+                return a ? { label: a.label, icon: a.icon, onClick: () => navigate(a.to) } : undefined;
+              })()} />
+            )}
+            {period.status === 'in_progress' && (
+              <PeriodCardInProgress action={(() => {
+                const a = ROLE_ACTION_CONFIG[role]?.in_progress;
+                return a ? { label: a.label, icon: a.icon, onClick: () => navigate(a.to) } : undefined;
+              })()} />
+            )}
+            {period.status === 'report_submission' && (
+              <PeriodCardReportSubmission action={(() => {
+                const a = ROLE_ACTION_CONFIG[role]?.report_submission;
+                return a ? { label: a.label, icon: a.icon, onClick: () => navigate(a.to) } : undefined;
+              })()} />
+            )}
+            {period.status === 'closed' && (
+              <PeriodCardClosed action={(() => {
+                const a = ROLE_ACTION_CONFIG[role]?.closed;
+                return a ? { label: a.label, icon: a.icon, onClick: () => navigate(a.to) } : undefined;
+              })()} />
+            )}
+            {period.status === 'scheduled' && (
+              <PeriodCardRegistration action={null} />
+            )}
+          </div>
+        </div>
       ) : (
         <PeriodNullCard />
       )}

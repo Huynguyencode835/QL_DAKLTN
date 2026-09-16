@@ -99,10 +99,17 @@ export interface Registration {
   status_display?: string;
 }
 
+export interface GradeWeightConfig {
+  scope: 'common' | 'thesis' | 'project_with_committee' | 'project_no_committee';
+  component: 'process' | 'final' | 'supervisor' | 'reviewer' | 'committee';
+  weight: number;
+}
+
 export interface RegistrationPeriod {
   id: number;
   name: string;
   academic_year: string;
+  period_type?: string;
   status?: string;
   active?: boolean;
   created_by?: string;
@@ -115,6 +122,7 @@ export interface RegistrationPeriod {
   student_registration_days?: number;
   report_submission_days?: number;
   execution_duration_weeks?: number;
+  grade_weight_configs?: GradeWeightConfig[];
 }
 
 export type PeriodStatus =
@@ -146,7 +154,153 @@ export interface Specialization {
   name: string;
   faculty?: { id?: number; name?: string };
 }
-export type ReportStatus = 'pending' | 'submitted' | 'approved' | 'rejected';
+export type CommitteeStatus = 'not_started' | 'in_progress' | 'completed';
+export type CommitteeMemberRole = 'chair' | 'secretary' | 'member' | 'reviewer';
+
+export interface CommitteeBase {
+  id: number;
+  name: string;
+  defense_date: string;
+  location: string;
+  status: CommitteeStatus;
+  registration_period: number;
+  period_name?: string;
+  academic_year?: string;
+}
+
+export interface LecturerCommittee extends CommitteeBase {
+  view_as: 'lecturer';
+  role_in_committee: CommitteeMemberRole;
+  member_count: number;
+  registration_count: number;
+}
+
+export interface StudentCommittee extends CommitteeBase {
+  view_as: 'student';
+  members: CommitteeMemberInfo[];
+  registrations: CommitteeRegistrationInfo[];
+  member_count: number;
+  registration_count: number;
+}
+
+export interface StaffCommittee extends CommitteeBase {
+  view_as: 'staff';
+  member_count: number;
+  registration_count: number;
+}
+
+export type MyCommittee = LecturerCommittee | StudentCommittee | StaffCommittee;
+
+export interface CommitteeMemberInfo {
+  id: number;
+  lecturer: number;
+  lecturer_name: string;
+  role: CommitteeMemberRole;
+}
+
+export interface CommitteeRegistrationInfo {
+  id: number;
+  student_id: string;
+  student_name: string;
+  lecturer_name: string;
+  project_title: string;
+  wants_thesis_upgrade: boolean;
+  status: string;
+}
+
+export interface CommitteeDetail {
+  id: number;
+  name: string;
+  defense_date: string;
+  location: string;
+  status: CommitteeStatus;
+  members_detail: CommitteeMemberInfo[];
+  registrations_detail: CommitteeRegistrationInfo[];
+}
+
+export interface GradeComponentData {
+  id: number;
+  registration: number;
+  grade_type: string;
+  component: string;
+  graded_by_lecturer: number | null;
+  graded_by_committee_member: number | null;
+  is_final: boolean;
+  score: string;
+  comment: string;
+  graded_at: string;
+  created_date: string;
+  updated_date: string;
+}
+
+export interface CommitteeMemberGradeData {
+  id: number;
+  member_id: number | null;
+  lecturer_id: number | null;
+  member_name: string | null;
+  role: string | null;
+  score: string;
+  comment: string;
+  is_final: boolean;
+  graded_at: string;
+}
+
+export interface RegistrationGradeData {
+  registration: number;
+  process: GradeComponentData | null;
+  final: GradeComponentData | null;
+  reviewer: GradeComponentData | null;
+  committee_members: CommitteeMemberGradeData[];
+  committee_avg: number | null;
+  supervisor_final: number | null;
+  final_score: number | null;
+}
+
+export interface GradeInput {
+  process?: number | null;
+  reviewer?: number | null;
+  committee?: number | null;
+  comment?: string;
+}
+
+export interface MemberGrade {
+  member_id: number;
+  member_name: string;
+  role: CommitteeMemberRole;
+  process?: number | null;
+  reviewer?: number | null;
+  committee?: number | null;
+  comment?: string;
+}
+
+export interface LecturerGradeRow {
+  id: number;
+  student_name: string;
+  student_id: string;
+  project_title: string;
+  is_thesis: boolean;
+  wants_thesis_upgrade: boolean;
+  process: number | null;
+  reviewer: number | null;
+  committee: number | null;
+  supervisor_final: number | null;
+  avg: number | null;
+  process_grade_id: number | null;
+  final_grade_id: number | null;
+}
+
+export interface StudentGradeRow {
+  id: number;
+  project_title: string;
+  process: number | null;
+  process_comment: string;
+  reviewer: number | null;
+  reviewer_comment: string;
+  committee: number | null;
+  committee_comment: string;
+}
+
+export type ReportStatus = 'pending' | 'submitted' | 'reviewed' | 'approved' | 'rejected' | 'late';
 
 export interface ReportColumn {
   key: string;
@@ -185,3 +339,47 @@ export interface Schedules {
 
 export type ApiCallback<T> = (data: T) => void;
 export type ErrorCallback = (type: string, message: string, data?: any) => void;
+
+export interface Notification {
+  id: number;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  is_read: boolean;
+  created_at: string;
+  link?: string;
+}
+
+export type ReviewerApprovalStatus = 'pending' | 'approved' | 'rejected' | 'skipped';
+
+export interface ReviewerAssignmentSession {
+  id: number;
+  registration_period: number;
+  reviewer: number;
+  reviewer_name: string;
+  defense_date: string;
+  location: string;
+  assignment_count: number;
+  created_by: number;
+  created_date: string;
+}
+
+export interface ReviewerAssignmentRegistration {
+  registration_id: number;
+  student_name: string;
+  student_id: string;
+  project_title: string;
+  approval_status: ReviewerApprovalStatus;
+}
+
+export interface ReviewerAssignmentDetail {
+  id: number;
+  registration_period: number;
+  reviewer: number;
+  reviewer_name: string;
+  defense_date: string;
+  location: string;
+  assignments: ReviewerAssignmentRegistration[];
+  created_by: number;
+  created_date: string;
+}

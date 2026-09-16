@@ -1,3 +1,4 @@
+from decimal import Decimal
 import os
 import sys
 import django
@@ -13,7 +14,8 @@ from theses.models import (
     User, Faculty, Major, Specialization, AcademicDegree,
     StudentProfile, LecturerProfile, StaffProfile,
     ListOfTopics, RegistrationPeriod, ProjectRegistration,
-    RegistrationLecturer,
+    RegistrationLecturer, GradeWeightConfig,
+    Committee, CommitteeMember, Grade, ReviewerAssignmentSession,
 )
 
 # Map nhãn học vị trong lecturers_data -> tên (name) của AcademicDegree
@@ -686,19 +688,23 @@ def reset_data():
     Thứ tự xoá tuân theo khoá ngoại (con trước, cha sau).
     """
     from theses.models import (
-        Committee, CommitteeMember, Faculty, Grade, LecturerProfile,
+        Committee, CommitteeMember, Faculty, Grade, LecturerProfile, GradeWeightConfig,
         ListOfTopics, Major, ProjectRegistration, RegistrationLecturer,
         RegistrationPeriod, Report, Specialization, StaffProfile,
-        StudentProfile, User,
+        StudentProfile, User, ReviewerAssignmentSession,
     )
 
     Report.objects.all().delete()
     Grade.objects.all().delete()
+    GradeWeightConfig.objects.all().delete()
     RegistrationLecturer.objects.all().delete()
     CommitteeMember.objects.all().delete()
     Committee.objects.all().delete()
-    ProjectRegistration.objects.all().delete()
-    RegistrationPeriod.objects.all().delete()
+    ReviewerAssignmentSession.objects.all().delete()
+    ProjectRegistration.objects.filter(is_thesis=True).delete()
+    ProjectRegistration.objects.filter(is_thesis=False).delete()
+    RegistrationPeriod.objects.filter(period_type=RegistrationPeriod.PeriodType.THESIS).delete()
+    RegistrationPeriod.objects.filter(period_type=RegistrationPeriod.PeriodType.PROJECT).delete()
     ListOfTopics.objects.all().delete()
     StudentProfile.objects.all().delete()
     LecturerProfile.objects.all().delete()
@@ -919,6 +925,27 @@ def run():
             'execution_duration_weeks': 10,
         },
     ]
+    DEFAULT_WEIGHT_CONFIGS = [
+        (GradeWeightConfig.Scope.COMMON, GradeWeightConfig.Component.PROCESS, Decimal('0.40')),
+        (GradeWeightConfig.Scope.COMMON, GradeWeightConfig.Component.FINAL, Decimal('0.60')),
+        (GradeWeightConfig.Scope.THESIS, GradeWeightConfig.Component.SUPERVISOR, Decimal('0.50')),
+        (GradeWeightConfig.Scope.THESIS, GradeWeightConfig.Component.REVIEWER, Decimal('0.20')),
+        (GradeWeightConfig.Scope.THESIS, GradeWeightConfig.Component.COMMITTEE, Decimal('0.30')),
+        (GradeWeightConfig.Scope.PROJECT_WITH_COMMITTEE, GradeWeightConfig.Component.SUPERVISOR, Decimal('0.50')),
+        (GradeWeightConfig.Scope.PROJECT_WITH_COMMITTEE, GradeWeightConfig.Component.COMMITTEE, Decimal('0.50')),
+        (GradeWeightConfig.Scope.PROJECT_NO_COMMITTEE, GradeWeightConfig.Component.SUPERVISOR, Decimal('1.00')),
+    ]
+
+    def create_default_weight_configs(period, updated_by):
+        """Tạo đủ bộ GradeWeightConfig cho 1 RegistrationPeriod — bắt buộc vì
+        hệ thống không còn config mặc định toàn cục (registration_period=None)."""
+        for scope, component, weight in DEFAULT_WEIGHT_CONFIGS:
+            GradeWeightConfig.objects.get_or_create(
+                registration_period=period,
+                scope=scope,
+                component=component,
+                defaults={'weight': weight, 'updated_by': updated_by},
+            )
 
     periods_by_key = {}
     for pd in period_data:
@@ -946,6 +973,7 @@ def run():
             },
         )
         periods_by_key[pd['key']] = period
+        create_default_weight_configs(period, updated_by=pd['created_by'])
         if created:
             print(f"  Created period: {period.name} [{period.status}]")
         else:
@@ -1201,8 +1229,495 @@ def run():
                     },
                 )
 
-    print("\n=== Seed completed ===")
+    # ================================================================
+    # ============  THÊM DỮ LIỆU TEST ĐIỂM TRONG OPEN_1  ===========
+    # Tạo thêm SV, đăng ký, hội đồng, điểm trong đợt đang mở (open_1)
+    # để test giao diện chấm điểm committee.
+    # ================================================================
+    print('\n' + '=' * 60)
+    print('  THÊM DỮ LIỆU TEST ĐIỂM (open_1 period)')
+    print('=' * 60)
+
+    open_period = periods_by_key['open_1']
+
+    # --- Tạo 8 sinh viên mới ---
+    extra_students = [
+        {
+            'username': f'student{i}', 'email': f'student{i}@ou.edu.vn',
+            'first_name': fn, 'last_name': ln,
+            'password': 'Student@123', 'faculty_idx': 0,
+            'profile': {
+                'student_id': f'3121{100 + i:04d}', 'class_name': 'DHCNTT20A',
+                'training_type': 'regular', 'program_type': 'standard',
+                'academic_year': '2022-2026', 'gpa': gpa, 'conduct_score': cs,
+                'major_idx': mi,
+            },
+        }
+        for i, fn, ln, gpa, cs, mi in [
+            (27, 'Nguyễn Thanh', 'Sang', 3.50, 88, 0),
+            (28, 'Trần Thị', 'Yến', 3.25, 85, 1),
+            (29, 'Lê Hoàng', 'Dũng', 3.80, 95, 3),
+            (30, 'Phạm Thị', 'Ngọc', 2.90, 78, 0),
+            (31, 'Võ Minh', 'Tâm', 3.65, 92, 1),
+            (32, 'Đặng Thị', 'Hạnh', 3.10, 82, 0),
+            (33, 'Ngô Văn', 'Kiên', 3.40, 87, 3),
+            (34, 'Hồ Thị', 'Diễm', 3.55, 90, 1),
+        ]
+    ]
+
+    extra_users = {}
+    for sd in extra_students:
+        user, created = create_student(sd, faculties, majors)
+        extra_users[sd['username']] = user
+        print(f"  {'Created' if created else 'Exists '} student: {user.username}")
+
+    committee1, c1_created = Committee.objects.get_or_create(
+        name='Hội đồng CNTT Đợt 6 A',
+        registration_period=open_period,
+        defaults={
+            'defense_date': now + timedelta(weeks=3),
+            'location': 'Phòng 301 - Nhà A',
+            'status': Committee.CommitteeStatus.NOT_STARTED,
+            'created_by': staff1,
+        },
+    )
+    print(f"  {'Created' if c1_created else 'Exists '} committee: {committee1.name}")
+
+    committee2, c2_created = Committee.objects.get_or_create(
+        name='Hội đồng CNTT Đợt 6 B',
+        registration_period=open_period,
+        defaults={
+            'defense_date': now + timedelta(weeks=3, days=1),
+            'location': 'Phòng 302 - Nhà A',
+            'status': Committee.CommitteeStatus.NOT_STARTED,
+            'created_by': staff1,
+        },
+    )
+    print(f"  {'Created' if c2_created else 'Exists '} committee: {committee2.name}")
+
+    # --- Thêm thành viên hội đồng ---
+    committee1_members = [
+        (committee1, users_by_username['lecturer1'], CommitteeMember.MemberRole.CHAIR),
+        (committee1, users_by_username['lecturer2'], CommitteeMember.MemberRole.SECRETARY),
+        (committee1, users_by_username['lecturer4'], CommitteeMember.MemberRole.MEMBER),
+        (committee1, users_by_username['lecturer7'], CommitteeMember.MemberRole.REVIEWER),
+    ]
+    committee2_members = [
+        (committee2, users_by_username['lecturer3'], CommitteeMember.MemberRole.CHAIR),
+        (committee2, users_by_username['lecturer6'], CommitteeMember.MemberRole.SECRETARY),
+        (committee2, users_by_username['lecturer4'], CommitteeMember.MemberRole.REVIEWER),
+    ]
+
+    c1_member_map = {}
+    for cm_committee, cm_lecturer, cm_role in committee1_members:
+        cm, _ = CommitteeMember.objects.get_or_create(
+            committee=cm_committee, lecturer=cm_lecturer,
+            defaults={'role': cm_role},
+        )
+        c1_member_map[cm_lecturer.username] = cm
+
+    c2_member_map = {}
+    for cm_committee, cm_lecturer, cm_role in committee2_members:
+        cm, _ = CommitteeMember.objects.get_or_create(
+            committee=cm_committee, lecturer=cm_lecturer,
+            defaults={'role': cm_role},
+        )
+        c2_member_map[cm_lecturer.username] = cm
+
+    print(f"  Committee1 members: {list(c1_member_map.keys())}")
+    print(f"  Committee2 members: {list(c2_member_map.keys())}")
+
+    # --- Tạo 8 đăng ký trong open_1 ---
+    # Type 1: không có hội đồng (committee=None) — 4 đăng ký
+    # Type 2: có hội đồng — 4 đăng ký
+    extra_registrations = [
+        # --- Type 1: Không hội đồng ---
+        {
+            'student': 'student27', 'lecturer': 'lecturer1', 'committee': None,
+            'project_title': 'Xây dựng app quản lý chi tiêu cá nhân',
+            'project_description': 'Phát triển ứng dụng mobile quản lý thu chi using Flutter.',
+            'wants_thesis_upgrade': True,
+        },
+        {
+            'student': 'student28', 'lecturer': 'lecturer1', 'committee': None,
+            'project_title': 'Hệ thống đặt lịch khám bệnh online',
+            'project_description': 'Xây dựng hệ thống đặt lịch khám từ xa cho phòng khám.',
+            'wants_thesis_upgrade': True,
+        },
+        {
+            'student': 'student29', 'lecturer': 'lecturer2', 'committee': None,
+            'project_title': 'Chatbot tư vấn tuyển sinh AI',
+            'project_description': 'Phát triển chatbot NLP tư vấn tuyển sinh cho thí sinh.',
+            'wants_thesis_upgrade': True,
+        },
+        {
+            'student': 'student30', 'lecturer': 'lecturer3', 'committee': None,
+            'project_title': 'Website bán hàng Spring Boot',
+            'project_description': 'Xây dựng ecommerce website using Spring Boot + React.',
+            'wants_thesis_upgrade': False,
+        },
+        # --- Type 2: Có hội đồng ---
+        {
+            'student': 'student31', 'lecturer': 'lecturer1', 'committee': committee1,
+            'project_title': 'Hệ thống chấm điểm tự động bài tập',
+            'project_description': 'Xây dựng hệ thống chấm tự động using sandbox Docker.',
+            'wants_thesis_upgrade': True,
+        },
+        {
+            'student': 'student32', 'lecturer': 'lecturer1', 'committee': committee1,
+            'project_title': 'Nền tảng thi trực tuyến',
+            'project_description': 'Xây dựng hệ thống thi online chống gian lận.',
+            'wants_thesis_upgrade': True,
+        },
+        {
+            'student': 'student33', 'lecturer': 'lecturer2', 'committee': committee2,
+            'project_title': 'Hệ thống gợi ý sản phẩm E-commerce',
+            'project_description': 'Xây dựng hệ thống gợi ý using collaborative filtering.',
+            'wants_thesis_upgrade': True,
+        },
+        {
+            'student': 'student34', 'lecturer': 'lecturer3', 'committee': committee2,
+            'project_title': 'App quản lý kho hàng nhỏ',
+            'project_description': 'Xây dựng ứng dụng quản lý nhập xuất kho cho SME.',
+            'wants_thesis_upgrade': True,
+        },
+    ]
+
+    created_registrations = []
+    for erd in extra_registrations:
+        student = extra_users[erd['student']]
+        lecturer = users_by_username[erd['lecturer']]
+        committee = erd['committee']
+
+        registration, reg_created = ProjectRegistration.objects.get_or_create(
+            student=student,
+            registration_period=open_period,
+            defaults={
+                'project_title': erd['project_title'],
+                'project_description': erd['project_description'],
+                'status': ProjectRegistration.STATUS.ASSIGNED_LECTURER_AND_PENDING,
+                'wants_thesis_upgrade': erd.get('wants_thesis_upgrade', False),
+                'committee': committee,
+            },
+        )
+        created_registrations.append((registration, lecturer, committee))
+
+        if reg_created:
+            # Tạo RegistrationLecturer role=MAIN, APPROVED
+            rl, _ = RegistrationLecturer.objects.get_or_create(
+                registration=registration,
+                lecturer=lecturer,
+                defaults={
+                    'role': RegistrationLecturer.Role.MAIN,
+                    'priority': 1,
+                    'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED,
+                    'responded_at': timezone.now(),
+                },
+            )
+            print(f"  Created reg: {student.username} -> {lecturer.username} "
+                  f"{'[committee]' if committee else '[no committee]'}")
+
+    # --- Tạo điểm cho tất cả 8 đăng ký ---
+    import random
+    random.seed(42)  # Để dữ liệu reproducible
+
+    supervisor_process_scores = [8.00, 8.50, 9.00, 7.50, 8.25, 7.75, 9.25, 8.75]
+    supervisor_final_scores =  [8.50, 9.00, 9.50, 8.00, 8.75, 8.25, 9.50, 9.00]
+
+    committee_member_scores = [
+        [8.00, 8.50, 7.50, 8.25],   # student31: 4 members
+        [9.00, 8.75, 8.50, 9.25],   # student32: 4 members
+        [8.50, 8.00, 7.75],          # student33: 3 members
+        [7.50, 8.00, 7.25],          # student34: 3 members
+    ]
+
+    print('\n  --- Tạo điểm supervisor ---')
+    for idx, (registration, lecturer, committee) in enumerate(created_registrations):
+        # Tìm RegistrationLecturer role=main cho registration này
+        rl_main = RegistrationLecturer.objects.filter(
+            registration=registration,
+            lecturer=lecturer,
+            role=RegistrationLecturer.Role.MAIN,
+        ).first()
+
+        if not rl_main:
+            print(f"    SKIP {registration.student.username}: no main RegistrationLecturer")
+            continue
+
+        proc_score = Decimal(str(supervisor_process_scores[idx]))
+        fin_score = Decimal(str(supervisor_final_scores[idx]))
+
+        # Supervisor Process
+        Grade.objects.get_or_create(
+            registration=registration,
+            grade_type=Grade.GradeType.SUPERVISOR,
+            component=Grade.Component.PROCESS,
+            graded_by_lecturer=rl_main,
+            defaults={
+                'is_final': True,
+                'score': proc_score,
+                'comment': f'Điểm quá trình của {registration.student.username}',
+            },
+        )
+
+        # Supervisor Final
+        Grade.objects.get_or_create(
+            registration=registration,
+            grade_type=Grade.GradeType.SUPERVISOR,
+            component=Grade.Component.FINAL,
+            graded_by_lecturer=rl_main,
+            defaults={
+                'is_final': True,
+                'score': fin_score,
+                'comment': f'Điểm cuối kỳ của {registration.student.username}',
+            },
+        )
+
+        print(f"    Supervisor grades: {registration.student.username} "
+              f"process={proc_score}, final={fin_score}")
+
+    # --- Tạo điểm hội đồng cho 4 đăng ký có committee ---
+    print('\n  --- Tạo điểm committee ---')
+    committee_reg_idx = 0
+    for registration, lecturer, committee in created_registrations:
+        if committee is None:
+            continue
+
+        member_map = c1_member_map if committee == committee1 else c2_member_map
+        scores = committee_member_scores[committee_reg_idx]
+
+        for (member_username, cm), score_val in zip(member_map.items(), scores):
+            score_decimal = Decimal(str(score_val))
+            Grade.objects.get_or_create(
+                registration=registration,
+                grade_type=Grade.GradeType.COMMITTEE,
+                component=Grade.Component.OVERALL,
+                graded_by_committee_member=cm,
+                defaults={
+                    'is_final': False,
+                    'score': score_decimal,
+                    'comment': f'Nhận xét từ {member_username}',
+                },
+            )
+            print(f"    Committee grade: {registration.student.username} "
+                  f"<- {member_username}: {score_decimal}")
+
+        # Tạo điểm aggregate (is_final=True, cả 2 grader=NULL)
+        avg_score = Decimal(str(round(sum(scores) / len(scores), 2)))
+        Grade.objects.update_or_create(
+            registration=registration,
+            grade_type=Grade.GradeType.COMMITTEE,
+            component=Grade.Component.OVERALL,
+            graded_by_committee_member=None,
+            graded_by_lecturer=None,
+            defaults={
+                'is_final': True,
+                'score': avg_score,
+                'comment': '',
+            },
+        )
+        print(f"    Committee aggregate: {registration.student.username} -> {avg_score}")
+
+        committee_reg_idx += 1
+
+    # --- Tính final_score cho tất cả 8 đăng ký ---
+    print('\n  --- Tính final_score ---')
+    for registration, lecturer, committee in created_registrations:
+        grades = list(Grade.objects.filter(registration=registration, is_final=True))
+
+        process = next((g for g in grades if g.grade_type == Grade.GradeType.SUPERVISOR
+                        and g.component == Grade.Component.PROCESS), None)
+        final = next((g for g in grades if g.grade_type == Grade.GradeType.SUPERVISOR
+                      and g.component == Grade.Component.FINAL), None)
+
+        if not (process and final):
+            registration.final_score = None
+            registration.save(update_fields=['final_score'])
+            continue
+
+        # Supervisor score = process * 0.4 + final * 0.6
+        supervisor_score = process.score * Decimal('0.40') + final.score * Decimal('0.60')
+
+        if committee:
+            # project_with_committee: supervisor * 0.5 + committee * 0.5
+            committee_grade = next((g for g in grades if g.grade_type == Grade.GradeType.COMMITTEE), None)
+            if committee_grade:
+                final_score = supervisor_score * Decimal('0.50') + committee_grade.score * Decimal('0.50')
+            else:
+                final_score = None
+        else:
+            # project_no_committee: supervisor * 1.0
+            final_score = supervisor_score
+
+        registration.final_score = round(final_score, 2) if final_score else None
+        registration.save(update_fields=['final_score'])
+        print(f"    {registration.student.username}: final_score = {registration.final_score}")
+
+    print('\n=== Additional seed data completed ===')
     print(f"    Hero accounts: {HERO_STAFF_USERNAME}, {HERO_STUDENT_USERNAME}, {HERO_LECTURER_USERNAME}")
+
+    # --------------------------------------------------------
+    # THESIS REGISTRATIONS + GRADES + REVIEWER SESSION
+    # --------------------------------------------------------
+    print('\n=== Tạo thesis registrations + reviewer session ===')
+
+    if open_period.status != RegistrationPeriod.STATUS.CLOSED:
+        open_period.status = RegistrationPeriod.STATUS.CLOSED
+        open_period.save()  # override save() tự set closed_at
+        print(f"  Đã đóng open_period trước khi tạo thesis period: {open_period.name}")
+    else:
+        print(f"  open_period đã CLOSED từ trước: {open_period.name}")
+
+    # Tạo thesis period bằng đúng classmethod create_thesis_period(),
+    # đảm bảo parent_period = open_period và đi qua validate
+    # parent_period.status == CLOSED.
+    thesis_period = RegistrationPeriod.objects.filter(
+        name='Đợt khóa luận - Học kỳ 2 (2024-2025)',
+        period_type=RegistrationPeriod.PeriodType.THESIS,
+    ).first()
+
+    if thesis_period is None:
+        thesis_period = RegistrationPeriod.create_thesis_period(
+            open_period,
+            name='Đợt khóa luận - Học kỳ 2 (2024-2025)',
+            start_offset_days=0,  # cho phép SV bắt đầu khóa luận ngay sau khi đợt đồ án đóng
+            created_by=staff1,
+            status=RegistrationPeriod.STATUS.STUDENT_REGISTRATION,
+            student_registration_days=open_period.student_registration_days,
+            execution_duration_weeks=open_period.execution_duration_weeks,
+            report_submission_days=open_period.report_submission_days,
+        )
+        thesis_created = True
+        print(f"  Created thesis period: {thesis_period.name}")
+    else:
+        thesis_created = False
+        print(f"  Thesis period already exists: {thesis_period.name}")
+
+    create_default_weight_configs(thesis_period, updated_by=staff1)
+
+    # Gộp extra_users vào users_by_username để tra cứu dễ dàng
+    all_users = {**users_by_username, **extra_users}
+
+    # 3 students đã có registration project (is_thesis=False) trong open_period
+    thesis_students = ['student31', 'student32', 'student33']
+    thesis_lecturers = ['lecturer1', 'lecturer2', 'lecturer3']
+    reviewer_lecturer = all_users['lecturer4']
+
+    thesis_process_scores = [8.50, 9.00, 7.75]
+    thesis_final_scores = [9.00, 9.25, 8.50]
+
+    thesis_registrations = []
+    for i, (student_username, lecturer_username) in enumerate(zip(thesis_students, thesis_lecturers)):
+        student_user = all_users[student_username]
+        lecturer_user = all_users[lecturer_username]
+
+        # Lấy registration gốc (is_thesis=False) trong open_period
+        original = ProjectRegistration.objects.filter(
+            student=student_user,
+            registration_period=open_period,
+            is_thesis=False,
+        ).first()
+
+        if not original:
+            print(f"    SKIP {student_username}: no original registration found")
+            continue
+
+        # Tạo thesis registration (is_thesis=True, upgraded_from=original)
+        # trong thesis_period. Vì thesis_period.parent_period == open_period
+        # == original.registration_period -> đúng điều kiện lineage trong
+        # clean() của ProjectRegistration.
+        thesis_reg, created = ProjectRegistration.objects.get_or_create(
+            student=student_user,
+            registration_period=thesis_period,
+            is_thesis=True,
+            defaults={
+                'project_title': f'[KHLC] {original.project_title}',
+                'project_description': f'Nâng cấp từ đồ án: {original.project_description}',
+                'status': ProjectRegistration.STATUS.ASSIGNED_LECTURER_AND_PENDING,
+                'wants_thesis_upgrade': True,
+                'upgraded_from': original,
+            },
+        )
+        thesis_registrations.append(thesis_reg)
+
+        if created:
+            print(f"    Created thesis reg: {student_username} -> {thesis_reg.project_title}")
+
+            RegistrationLecturer.objects.get_or_create(
+                registration=thesis_reg,
+                lecturer=lecturer_user,
+                defaults={
+                    'role': RegistrationLecturer.Role.MAIN,
+                    'priority': 1,
+                    'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED,
+                    'responded_at': timezone.now(),
+                },
+            )
+
+            rl_main = RegistrationLecturer.objects.filter(
+                registration=thesis_reg,
+                lecturer=lecturer_user,
+                role=RegistrationLecturer.Role.MAIN,
+            ).first()
+
+            Grade.objects.get_or_create(
+                registration=thesis_reg,
+                grade_type=Grade.GradeType.SUPERVISOR,
+                component=Grade.Component.PROCESS,
+                graded_by_lecturer=rl_main,
+                defaults={
+                    'is_final': True,
+                    'score': Decimal(str(thesis_process_scores[i])),
+                    'comment': f'Điểm quá trình KHLC của {student_username}',
+                },
+            )
+
+            Grade.objects.get_or_create(
+                registration=thesis_reg,
+                grade_type=Grade.GradeType.SUPERVISOR,
+                component=Grade.Component.FINAL,
+                graded_by_lecturer=rl_main,
+                defaults={
+                    'is_final': True,
+                    'score': Decimal(str(thesis_final_scores[i])),
+                    'comment': f'Điểm cuối kỳ KHLC của {student_username}',
+                },
+            )
+
+            print(f"    Supervisor grades: process={thesis_process_scores[i]}, final={thesis_final_scores[i]}")
+        else:
+            print(f"    Thesis reg already exists: {student_username}")
+
+    # Tạo ReviewerAssignmentSession TRƯỚC, rồi mới tạo reviewer RL
+    if thesis_registrations:
+        session, session_created = ReviewerAssignmentSession.objects.get_or_create(
+            registration_period=thesis_period,
+            reviewer=reviewer_lecturer,
+            defaults={
+                'defense_date': timezone.now() + timedelta(weeks=3),
+                'location': 'Phòng 301 - Nhà A',
+                'created_by': staff1,
+            },
+        )
+        if session_created:
+            print(f"\n    Created ReviewerAssignmentSession: {reviewer_lecturer.username} "
+                  f"({session.defense_date}, {session.location})")
+        else:
+            print(f"\n    ReviewerAssignmentSession already exists for {reviewer_lecturer.username}")
+
+        for reg in thesis_registrations:
+            RegistrationLecturer.objects.get_or_create(
+                registration=reg,
+                lecturer=reviewer_lecturer,
+                defaults={
+                    'role': RegistrationLecturer.Role.REVIEWER,
+                    'priority': 1,
+                    'approval_status': RegistrationLecturer.ApprovalStatus.APPROVED,
+                    'responded_at': timezone.now(),
+                    'reviewer_session': session,
+                },
+            )
+        print(f"    Assigned {len(thesis_registrations)} thesis registrations to session")
 
 
 if __name__ == '__main__':

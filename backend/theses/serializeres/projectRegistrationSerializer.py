@@ -1,5 +1,7 @@
 from rest_framework import serializers
-from theses.models import ProjectRegistration, RegistrationLecturer, Specialization, User
+from django.db import transaction
+from django.utils import timezone
+from theses.models import ProjectRegistration, RegistrationLecturer, RegistrationPeriod, Specialization, User
 from theses.serializeres.userSerializer import SpecializationSerializer
 from theses.validators import validate_non_blank
 from theses.services import get_lecturer_remaining_slots
@@ -31,14 +33,14 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
 
     LECTURER_STAFF_LIST_FIELDS = (
         'id', 'student_id', 'student_name', 'project_title',
-        'status', 'lecturer_name','wants_thesis_upgrade'
+        'status', 'lecturer_name','wants_thesis_upgrade','is_thesis'
     )
 
     class Meta:
         model = ProjectRegistration
         fields = [
             'id', 'student', 'avatar', 'student_id', 'specialization', 'student_name',
-            'lecturer_name', 'lecturer_assignments',
+            'lecturer_name', 'lecturer_assignments', 'final_score',
             'project_title', 'project_description', 'wants_thesis_upgrade', 'status',
             'is_thesis', 'registration_period',
             'advisor1', 'advisor2', 'note1', 'note2',
@@ -192,28 +194,29 @@ class ProjectRegistrationSerializer(serializers.ModelSerializer):
         note2 = validated_data.pop('note2', '')
 
         if not validated_data.get('wants_thesis_upgrade', False):
-            validated_data['status'] = ProjectRegistration.STATUS.ASSIGNED_LECTURER_AND_PENDING
+            validated_data['status'] = ProjectRegistration.STATUS.WAITING_STAFF_ASSIGNMENT
 
         registration = super().create(validated_data)
 
-        if advisor1:
-            RegistrationLecturer.objects.create(
-                registration=registration,
-                lecturer_id=advisor1,
-                role=RegistrationLecturer.Role.PREFERENCE,
-                priority=1,
-                approval_status=RegistrationLecturer.ApprovalStatus.PENDING,
-                note=note1,
-            )
-        if advisor2:
-            RegistrationLecturer.objects.create(
-                registration=registration,
-                lecturer_id=advisor2,
-                role=RegistrationLecturer.Role.PREFERENCE,
-                priority=2,
-                approval_status=RegistrationLecturer.ApprovalStatus.PENDING,
-                note=note2,
-            )
+        with transaction.atomic():
+            if advisor1:
+                RegistrationLecturer.objects.create(
+                    registration=registration,
+                    lecturer_id=advisor1,
+                    role=RegistrationLecturer.Role.PREFERENCE,
+                    priority=1,
+                    approval_status=RegistrationLecturer.ApprovalStatus.PENDING,
+                    note=note1,
+                )
+            if advisor2:
+                RegistrationLecturer.objects.create(
+                    registration=registration,
+                    lecturer_id=advisor2,
+                    role=RegistrationLecturer.Role.PREFERENCE,
+                    priority=2,
+                    approval_status=RegistrationLecturer.ApprovalStatus.PENDING,
+                    note=note2,
+                )
 
         return registration
 
@@ -344,3 +347,89 @@ class AddLecturerSerializer(serializers.Serializer):
                 )
 
         return attrs
+
+
+class ConvertToThesisSerializer(serializers.Serializer):
+    registration_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        min_length=1,
+    )
+
+    def validate_registration_ids(self, value):
+        regs = ProjectRegistration.objects.filter(id__in=value, active=True)
+        if regs.count() != len(value):
+            raise serializers.ValidationError('Một hoặc nhiều registration không tồn tại.')
+        return value
+
+    def validate(self, attrs):
+        request = self.context['request']
+        thesis_period = self.context['thesis_period']
+
+        if thesis_period.period_type != RegistrationPeriod.PeriodType.THESIS:
+            raise serializers.ValidationError('Period phải là đợt khóa luận.')
+
+        parent = thesis_period.parent_period
+        if not parent:
+            raise serializers.ValidationError('Đợt khóa luận phải có parent period.')
+
+        already_thesis = ProjectRegistration.objects.filter(
+            registration_period=thesis_period,
+            upgraded_from_id__in=attrs['registration_ids'],
+            active=True,
+        ).values_list('upgraded_from_id', flat=True)
+        if already_thesis:
+            raise serializers.ValidationError(
+                f'Một số registration đã được chuyển: IDs {list(already_thesis)}'
+            )
+
+        regs = ProjectRegistration.objects.filter(
+            id__in=attrs['registration_ids'],
+            active=True,
+            registration_period=parent,
+            student__faculty=request.user.faculty,
+            is_thesis=False,
+            wants_thesis_upgrade=True,
+            final_score__gte=8,
+            student__student_profile__gpa__gt=2.5,
+            upgraded_to__isnull=True,
+        )
+        if regs.count() != len(attrs['registration_ids']):
+            raise serializers.ValidationError(
+                'Một số registration không thỏa điều kiện (final_score>=8, gpa>2.5, chưa nâng cấp).'
+            )
+
+        attrs['registrations'] = list(regs)
+        attrs['thesis_period'] = thesis_period
+        attrs['parent_period'] = parent
+        return attrs
+
+    def save(self):
+        thesis_period = self.validated_data['thesis_period']
+        created = []
+        with transaction.atomic():
+            for reg in self.validated_data['registrations']:
+                new_reg = ProjectRegistration.objects.create(
+                    student=reg.student,
+                    registration_period=thesis_period,
+                    project_title=reg.project_title,
+                    project_description=reg.project_description,
+                    specialization=reg.specialization,
+                    is_thesis=True,
+                    upgraded_from=reg,
+                    status=ProjectRegistration.STATUS.ASSIGNED_LECTURER_AND_PENDING,
+                )
+
+                main_assignment = reg.lecturer_assignments.filter(
+                    role=RegistrationLecturer.Role.MAIN,
+                ).first()
+                if main_assignment:
+                    RegistrationLecturer.objects.create(
+                        registration=new_reg,
+                        lecturer=main_assignment.lecturer,
+                        role=RegistrationLecturer.Role.MAIN,
+                        approval_status=RegistrationLecturer.ApprovalStatus.APPROVED,
+                        responded_at=timezone.now(),
+                    )
+
+                created.append(new_reg)
+        return created

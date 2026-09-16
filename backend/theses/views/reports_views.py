@@ -1,5 +1,6 @@
 # reports/views.py
 from django.utils import timezone
+from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 from rest_framework import viewsets, generics, status
@@ -7,14 +8,16 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.exceptions import (
-    PermissionDenied, ValidationError as DRFValidationError
+    PermissionDenied, ValidationError as DRFValidationError, NotFound
 )
 from rest_framework.decorators import action
 
 from core.r2_client import get_r2_client, get_r2_bucket_name
-from theses.models import Report, RegistrationLecturer
+from theses.models import ProjectRegistration, Report, RegistrationLecturer
+from theses.email_utils import send_notification_email
 from theses.permissions import CanAccessReport, CanCreateReport
 from theses.serializeres.reportsSerializer import (
+    FinalReportDetailSerializer,
     ReportSerializer,
     FinalReportUploadSerializer,
 )
@@ -64,6 +67,30 @@ class ReportViewSet(
     def get_queryset(self):
         return Report.objects.select_related('registration')
 
+    @action(detail=False, methods=['get'], url_path='final')
+    def final_detail(self, request, *args, **kwargs):
+        serializer = FinalReportDetailSerializer(
+            data=request.query_params, context={'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+        registration = serializer.validated_data['registration']
+
+        reports = Report.objects.filter(
+            registration=registration,
+            report_type=Report.ReportType.FINAL,
+        ).order_by('-sequence_number')
+
+        if not reports.exists():
+            return Response(
+                {'detail': 'Chưa có báo cáo cuối kỳ nào được nộp.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response({
+            'latest': ReportSerializer(reports.first()).data,
+            'history': ReportSerializer(reports, many=True).data,
+        })
+
     @action(detail=False, methods=['post'], url_path='upload-final')
     def upload_final(self, request, *args, **kwargs):
         serializer = FinalReportUploadSerializer(
@@ -102,7 +129,32 @@ class ReportViewSet(
             status=Report.Status.LATE if is_late else Report.Status.SUBMITTED,
         )
 
+        supervisor = registration.lecturer_assignments.filter(role='main').first()
+        recipients = [registration.student.email]
+        if supervisor:
+            recipients.append(supervisor.lecturer.email)
+
+        status_text = 'nộp trễ' if is_late else 'đã được nộp'
+        send_notification_email(
+            'info_notification',
+            'Báo cáo cuối kỳ đã được nộp',
+            recipients,
+            {
+                'title': f'Báo cáo cuối kỳ {status_text}',
+                'student_name': registration.student.get_full_name() or registration.student.username,
+                'message': f'Sinh viên {registration.student.get_full_name() or registration.student.username} vừa {status_text} báo cáo cuối kỳ cho đề tài "{registration.project_title}".',
+                'details': [
+                    ('Đề tài', registration.project_title),
+                    ('Trạng thái', report.get_status_display()),
+                    ('Thời gian', timezone.localtime(report.created_date).strftime('%d/%m/%Y %H:%M')),
+                ],
+                'action_url': f'{settings.FRONTEND_URL}/reports',
+                'action_label': 'Xem báo cáo',
+            },
+        )
+
         return Response(ReportSerializer(report).data, status=status.HTTP_201_CREATED)
+
 
     # --- custom action: xem chi tiết report ---
     @action(detail=True, methods=['get'], url_path='detail')
@@ -122,35 +174,3 @@ class ReportViewSet(
             ExpiresIn=3600,
         )
         return Response({'url': url})
-
-    # --- custom action: giảng viên review báo cáo periodic ---
-    @action(detail=True, methods=['post'])
-    def review(self, request, pk=None):
-        report = self.get_object()
-
-        if report.report_type != Report.ReportType.PERIODIC:
-            raise DRFValidationError('Chỉ review được báo cáo định kỳ tại đây')
-
-        is_main_lecturer = report.registration.lecturer_assignments.filter(
-            lecturer_id=request.user.id,
-            role=RegistrationLecturer.Role.MAIN,
-        ).exists()
-        if not is_main_lecturer and not request.user.is_staff:
-            raise PermissionDenied('Bạn không có quyền review báo cáo này')
-
-        new_status = request.data.get('status')
-        feedback = request.data.get('feedback', '')
-
-        valid_statuses = [Report.Status.REVIEWED, Report.Status.APPROVED, Report.Status.REJECTED]
-        if new_status not in valid_statuses:
-            raise DRFValidationError(f'status phải là một trong: {valid_statuses}')
-
-        if new_status == Report.Status.REJECTED and not feedback.strip():
-            raise DRFValidationError('Cần ghi rõ lý do khi yêu cầu nộp lại')
-
-        report.status = new_status
-        report.feedback = feedback
-        report.reviewed_at = timezone.now()
-        report.save()
-
-        return Response(ReportSerializer(report).data)

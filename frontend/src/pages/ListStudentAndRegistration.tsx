@@ -1,6 +1,6 @@
 import { type ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { useModal, useUser, usePageHeader, useToast, usePagination, useSearch } from '../hooks';
-import { fetchWithAuth, updatePatchWithAuth } from '../utils/ApiHelper';
+import { fetchWithAuth, createWithAuth, updatePatchWithAuth } from '../utils/ApiHelper';
 import { endpoints } from '../config/Apis';
 import Card, { SectionCard } from '../components/Ui/Card';
 import Button from '../components/Ui/Button';
@@ -41,7 +41,7 @@ export default function ListStudentsAndRegistration() {
   const { user } = useUser();
   const toast = useToast();
   const [registrationPeriods, setRegistrationPeriods] = useState<RegistrationPeriod[]>([]);
-  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('current');
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('current-project');
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [lecturers, setLecturers] = useState<Lecturer[]>([]);
   const [specialization, setSpecialization] = useState<Specialization[]>([]);
@@ -58,6 +58,26 @@ export default function ListStudentsAndRegistration() {
   const { resetPage, paginationParams, handlePaginatedResponse, paginationProps } = usePagination();
   const isStaff = user?.role === 'staff';
 
+  const selectedPeriod = useMemo(() => {
+    if (!selectedPeriodId) return null;
+    if (selectedPeriodId === 'current-project') {
+      return registrationPeriods.find(p => p.period_type === 'project' && p.status === 'student_registration') || null;
+    }
+    if (selectedPeriodId === 'current-thesis') {
+      return registrationPeriods.find(p => p.period_type === 'thesis' && p.status === 'student_registration') || null;
+    }
+    return registrationPeriods.find(p => String(p.id) === selectedPeriodId) || null;
+  }, [selectedPeriodId, registrationPeriods]);
+
+  const isStudentRegistration = selectedPeriod?.status === 'student_registration';
+  const [periodTypeFilter, setPeriodTypeFilter] = useState('');
+  const [activeTab, setActiveTab] = useState<'registrations' | 'thesis_upgrade'>('registrations');
+  const [thesisPeriods, setThesisPeriods] = useState<RegistrationPeriod[]>([]);
+  const [selectedThesisPeriodId, setSelectedThesisPeriodId] = useState<string>('');
+  const [thesisRegistrations, setThesisRegistrations] = useState<Registration[]>([]);
+  const [selectedThesisIds, setSelectedThesisIds] = useState<number[]>([]);
+  const [convertLoading, setConvertLoading] = useState(false);
+
   usePageHeader({
     title: 'Danh sách Sinh viên & Đăng ký',
     description: 'Quản lý danh sách sinh viên đã đăng ký đề tài và trạng thái xét duyệt.',
@@ -72,6 +92,16 @@ export default function ListStudentsAndRegistration() {
   }, []);
 
   useEffect(() => {
+    loadPeriods();
+    setSelectedPeriodId(periodTypeFilter === 'thesis' ? 'current-thesis' : 'current-project');
+  }, [periodTypeFilter]);
+
+  useEffect(() => {
+    const thesis = registrationPeriods.filter(p => p.period_type === 'thesis');
+    setThesisPeriods(thesis);
+  }, [registrationPeriods]);
+
+  useEffect(() => {
     resetPage();
     setSelectedIds([]);
   }, [statusFilter, selectedPeriodId, searchParams]);
@@ -81,13 +111,22 @@ export default function ListStudentsAndRegistration() {
     if (selectedPeriodId) loadRegistrations();
   }, [selectedPeriodId, paginationParams.page, searchParams, statusFilter]);
 
+  useEffect(() => {
+    if (activeTab === 'thesis_upgrade' && selectedThesisPeriodId) {
+      const thesisPeriod = thesisPeriods.find(p => String(p.id) === selectedThesisPeriodId);
+      if (thesisPeriod?.parent_period) {
+        loadThesisRegistrations(String(thesisPeriod.parent_period));
+      }
+    }
+  }, [activeTab, selectedThesisPeriodId, paginationParams.page]);
+
   const loadPeriods = async () => {
     setPeriodsLoading(true);
     await fetchWithAuth(
       endpoints.registrationPeriods,
       (data: RegistrationPeriod[]) => setRegistrationPeriods(data),
       () => { },
-      {},
+      { period_type: periodTypeFilter || undefined },
       () => setPeriodsLoading(false)
     );
   };
@@ -114,6 +153,42 @@ export default function ListStudentsAndRegistration() {
     await fetchWithAuth(endpoints.registrationDetail(selectedPeriodId, id), onSuccess, (type: string, msg: string) => {
       toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
     }, {}, setDetailLoading);
+  };
+
+  const loadThesisRegistrations = async (parentPeriodId: string) => {
+    setLoading(true);
+    await fetchWithAuth(
+      endpoints.registrationsThesis(parentPeriodId),
+      (data: Registration[], paginatedData?: { count: number }) => {
+        setThesisRegistrations(handlePaginatedResponse(data, paginatedData));
+      },
+      (type: string, msg: string) => {
+        toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
+      },
+      paginationParams,
+      () => setLoading(false)
+    );
+  };
+
+  const handleConvertToThesis = async () => {
+    if (selectedThesisIds.length === 0 || !selectedThesisPeriodId) return;
+    setConvertLoading(true);
+    await createWithAuth(
+      endpoints.convertToThesis(selectedThesisPeriodId),
+      { registration_ids: selectedThesisIds },
+      (data: Registration[]) => {
+        toast.success('Chuyển thành công', `Đã chuyển ${data.length} đăng ký sang khóa luận.`);
+        setSelectedThesisIds([]);
+        const thesisPeriod = thesisPeriods.find(p => String(p.id) === selectedThesisPeriodId);
+        if (thesisPeriod?.parent_period) {
+          loadThesisRegistrations(String(thesisPeriod.parent_period));
+        }
+      },
+      (type: string, msg: string) => {
+        toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
+      },
+      () => setConvertLoading(false)
+    );
   };
 
   const handleApprove = async (id: number) => {
@@ -214,7 +289,7 @@ export default function ListStudentsAndRegistration() {
                 <RegInfo
                   icon="fa-solid fa-book-open"
                   label="Loại"
-                  value={data.wants_thesis_upgrade ? 'Khóa luận tốt nghiệp' : 'Thực tập tốt nghiệp'}
+                  value={data.is_thesis ? 'Khóa luận tốt nghiệp' : data.wants_thesis_upgrade ? 'Đồ án phát triển khóa luận' : 'Đồ án'}
                 />
                 <Card variant="soft" className="!p-3" bodyClassName="!p-0 flex items-center justify-between gap-3">
                   <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Trạng thái</p>
@@ -256,7 +331,7 @@ export default function ListStudentsAndRegistration() {
         ),
         footer: (
           <div className="flex items-center gap-2">
-            {hasPendingApproval && (
+            {hasPendingApproval && isStudentRegistration && (
               <>
                 <Button variant="success" size="sm" icon="fa-solid fa-check" onClick={() => { handleApprove(reg.id); closeModal(); }}>
                   Duyệt
@@ -332,8 +407,8 @@ export default function ListStudentsAndRegistration() {
         key: 'wants_thesis_upgrade',
         label: 'Loại',
         render: (reg) => (
-          <Badge variant={reg.wants_thesis_upgrade ? 'info' : 'neutral'} dot>
-            {reg.wants_thesis_upgrade ? 'Khóa luận' : 'Đồ án'}
+          <Badge variant={reg.is_thesis ? 'info' : reg.wants_thesis_upgrade ? 'warning' : 'neutral'} dot>
+            {reg.is_thesis ? 'Khóa luận' : reg.wants_thesis_upgrade ? 'Đồ án phát triển khóa luận' : 'Đồ án'}
           </Badge>
         ),
       },
@@ -387,45 +462,130 @@ export default function ListStudentsAndRegistration() {
     return cols;
   }, [isStaff]);
 
+  const thesisColumns: TableColumn<Registration>[] = useMemo(() => [
+    {
+      key: 'student_id',
+      label: 'MSSV',
+      render: (reg) => (
+        <Badge variant="primary" className="font-mono">{reg.student?.student_id || reg.student_id || '—'}</Badge>
+      ),
+    },
+    {
+      key: 'student_name',
+      label: 'Họ tên',
+      render: (reg) => (
+        <span className="font-medium text-gray-800">{reg.student?.full_name || reg.student_name || '—'}</span>
+      ),
+    },
+    {
+      key: 'project_title',
+      label: 'Đề tài',
+      render: (reg) => <span className="text-gray-600 line-clamp-1">{reg.project_title || '—'}</span>,
+    },
+    {
+      key: 'lecturer_name',
+      label: 'GV hướng dẫn',
+      render: (reg) => <span>{reg.lecturer_name || '—'}</span>,
+    },
+    {
+      key: 'wants_thesis_upgrade',
+      label: 'Điều kiện',
+      render: () => <Badge variant="info" dot>Đủ điều kiện</Badge>,
+    },
+  ], []);
+
   return (
     <div className="space-y-6">
       <div className="mx-auto w-full space-y-6">
-        <FilterBar
-          searchValue={search}
-          onSearchChange={setSearch}
-          searchPlaceholder="Tìm kiếm theo tên hoặc MSSV..."
-          dropdowns={[
-            {
-              key: 'period',
-              value: selectedPeriodId,
-              onChange: setSelectedPeriodId,
-              placeholder: periodsLoading ? 'Đang tải...' : 'Chọn đợt đăng ký',
-              loading: periodsLoading,
-              widthClassName: 'w-full sm:w-64',
-              options: [
-                { value: 'current', label: 'Đợt hiện tại (đang mở)' },
-                ...registrationPeriods.map((p) => ({ value: String(p.id), label: `${p.name} (${p.academic_year})` })),
-              ],
-            },
-            {
-              key: 'status',
-              value: statusFilter,
-              onChange: (v) => setStatusFilter(v === 'all' ? '' : v),
-              placeholder: 'Tất cả trạng thái',
-              widthClassName: 'w-full sm:w-48',
-              options: [
-                { value: 'all', label: 'Tất cả' },
-                { value: 'waiting_lecturer', label: 'Chờ phân GV' },
-                { value: 'waiting_staff_assignment', label: 'Chờ giáo vụ phân công' },
-                { value: 'assigned_lecturer', label: 'Đã duyệt' },
-              ],
-            },
-          ]}
-          onRefresh={loadRegistrations}
-          refreshLoading={loading}
-        />
+        {isStaff && thesisPeriods.length > 0 && (
+          <div className="flex gap-2">
+            <Button
+              variant={activeTab === 'registrations' ? 'primary' : 'outline'}
+              size="sm"
+              onClick={() => setActiveTab('registrations')}
+            >
+              Danh sách đăng ký
+            </Button>
+            <Button
+              variant={activeTab === 'thesis_upgrade' ? 'primary' : 'outline'}
+              size="sm"
+              icon="fa-solid fa-arrow-up-right-dots"
+              onClick={() => setActiveTab('thesis_upgrade')}
+            >
+              Nâng cấp khóa luận
+            </Button>
+          </div>
+        )}
 
-        {showCheckbox && (
+        {activeTab === 'registrations' && (
+          <FilterBar
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="Tìm kiếm theo tên hoặc MSSV..."
+            dropdowns={[
+              {
+                key: 'periodType',
+                value: periodTypeFilter,
+                onChange: (v) => setPeriodTypeFilter(v === 'all' ? '' : v),
+                placeholder: 'Tất cả loại đợt',
+                widthClassName: 'w-full sm:w-48',
+                options: [
+                  { value: 'all', label: 'Tất cả' },
+                  { value: 'project', label: 'Đợt đồ án' },
+                  { value: 'thesis', label: 'Đợt khóa luận' },
+                ],
+              },
+              {
+                key: 'period',
+                value: selectedPeriodId,
+                onChange: setSelectedPeriodId,
+                placeholder: periodsLoading ? 'Đang tải...' : 'Chọn đợt đăng ký',
+                loading: periodsLoading,
+                widthClassName: 'w-full sm:w-64',
+                options: [
+                  { value: 'current-project', label: 'Đợt đồ án hiện tại' },
+                  { value: 'current-thesis', label: 'Đợt khóa luận hiện tại' },
+                  ...registrationPeriods.map((p) => ({ value: String(p.id), label: `${p.name} (${p.academic_year})` })),
+                ],
+              },
+              {
+                key: 'status',
+                value: statusFilter,
+                onChange: (v) => setStatusFilter(v === 'all' ? '' : v),
+                placeholder: 'Tất cả trạng thái',
+                widthClassName: 'w-full sm:w-48',
+                options: [
+                  { value: 'all', label: 'Tất cả' },
+                  { value: 'waiting_lecturer', label: 'Chờ phân GV' },
+                  { value: 'waiting_staff_assignment', label: 'Chờ giáo vụ phân công' },
+                  { value: 'assigned_lecturer', label: 'Đã duyệt' },
+                ],
+              },
+            ]}
+            onRefresh={loadRegistrations}
+            refreshLoading={loading}
+          />
+        )}
+
+        {activeTab === 'thesis_upgrade' && (
+          <Card variant="elevated" bodyClassName="space-y-4">
+            <Select
+              label="Chọn đợt khóa luận"
+              placeholder="Chọn đợt khóa luận..."
+              value={selectedThesisPeriodId}
+              onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+                setSelectedThesisPeriodId(e.target.value);
+                setSelectedThesisIds([]);
+              }}
+              options={thesisPeriods.map((p) => ({
+                value: String(p.id),
+                label: `${p.name} (${p.academic_year})`,
+              }))}
+            />
+          </Card>
+        )}
+
+        {activeTab === 'registrations' && showCheckbox && (
           <Card variant="elevated" bodyClassName="space-y-4">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1">
@@ -450,47 +610,110 @@ export default function ListStudentsAndRegistration() {
           </Card>
         )}
 
-        {!selectedPeriodId ? (
-          <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-            <i className="fa-solid fa-calendar-week text-4xl mb-3"></i>
-            <p className="text-sm font-medium">Vui lòng chọn đợt đăng ký</p>
-          </div>
-        ) : loading ? (
-          <div className="flex items-center justify-center py-12">
-            <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
-          </div>
-        ) : (
+        {activeTab === 'registrations' && (
           <>
-            <GenericTable
-              rows={registrations}
-              columns={columns}
-              rowKey={(reg) => reg.id}
-              emptyText="Không có sinh viên nào"
-              selectable={showCheckbox}
-              selectedIds={selectedIds}
-              allSelected={allFilteredSelected}
-              onToggleSelect={(id) => toggleSelect(Number(id))}
-              onToggleSelectAll={toggleSelectAll}
-            />
-            <Pagination {...paginationProps} />
+            {!selectedPeriodId ? (
+              <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                <i className="fa-solid fa-calendar-week text-4xl mb-3"></i>
+                <p className="text-sm font-medium">Vui lòng chọn đợt đăng ký</p>
+              </div>
+            ) : loading ? (
+              <div className="flex items-center justify-center py-12">
+                <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
+              </div>
+            ) : (
+              <>
+                <GenericTable
+                  rows={registrations}
+                  columns={columns}
+                  rowKey={(reg) => reg.id}
+                  emptyText="Không có sinh viên nào"
+                  selectable={showCheckbox}
+                  selectedIds={selectedIds}
+                  allSelected={allFilteredSelected}
+                  onToggleSelect={(id) => toggleSelect(Number(id))}
+                  onToggleSelectAll={toggleSelectAll}
+                />
+                <Pagination {...paginationProps} />
+              </>
+            )}
+
+            {showCheckbox && (
+              <div className="flex justify-between items-center gap-4 mt-2">
+                <div className="flex items-end gap-1">
+                  {selectedIds.length > 0 && (
+                    <span className="text-xs text-gray-500 whitespace-nowrap py-2">
+                      Đã chọn <strong className="text-primary">{selectedIds.length}</strong> sinh viên
+                    </span>
+                  )}
+                </div>
+                <div className="flex justify-end overflow-x-auto">
+                  <Button variant="primary" icon="fa-solid fa-rotate" onClick={handleAddLecturers} loading={loading}>
+                    Phân giảng viên hướng dẫn
+                  </Button>
+                </div>
+              </div>
+            )}
           </>
         )}
 
-        {showCheckbox && (
-          <div className="flex justify-between items-center gap-4 mt-2">
-            <div className="flex items-end gap-1">
-              {selectedIds.length > 0 && (
-                <span className="text-xs text-gray-500 whitespace-nowrap py-2">
-                  Đã chọn <strong className="text-primary">{selectedIds.length}</strong> sinh viên
-                </span>
-              )}
-            </div>
-            <div className="flex justify-end overflow-x-auto">
-              <Button variant="primary" icon="fa-solid fa-rotate" onClick={handleAddLecturers} loading={loading}>
-                Phân giảng viên hướng dẫn
-              </Button>
-            </div>
-          </div>
+        {activeTab === 'thesis_upgrade' && (
+          <>
+            {!selectedThesisPeriodId ? (
+              <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                <i className="fa-solid fa-calendar-week text-4xl mb-3"></i>
+                <p className="text-sm font-medium">Vui lòng chọn đợt khóa luận</p>
+              </div>
+            ) : loading ? (
+              <div className="flex items-center justify-center py-12">
+                <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
+              </div>
+            ) : (
+              <>
+                <GenericTable
+                  rows={thesisRegistrations}
+                  columns={thesisColumns}
+                  rowKey={(reg) => reg.id}
+                  emptyText="Không có sinh viên đủ điều kiện"
+                  selectable
+                  selectedIds={selectedThesisIds}
+                  allSelected={thesisRegistrations.length > 0 && thesisRegistrations.every((r) => selectedThesisIds.includes(r.id))}
+                  onToggleSelect={(id) => {
+                    const numId = Number(id);
+                    setSelectedThesisIds((prev) => (prev.includes(numId) ? prev.filter((i) => i !== numId) : [...prev, numId]));
+                  }}
+                  onToggleSelectAll={() => {
+                    if (thesisRegistrations.every((r) => selectedThesisIds.includes(r.id))) {
+                      setSelectedThesisIds((prev) => prev.filter((id) => !thesisRegistrations.some((r) => r.id === id)));
+                    } else {
+                      setSelectedThesisIds((prev) => [...new Set([...prev, ...thesisRegistrations.map((r) => r.id)])]);
+                    }
+                  }}
+                />
+                <Pagination {...paginationProps} />
+              </>
+            )}
+
+            {selectedThesisIds.length > 0 && (
+              <div className="flex justify-between items-center gap-4 mt-2">
+                <div className="flex items-end gap-1">
+                  <span className="text-xs text-gray-500 whitespace-nowrap py-2">
+                    Đã chọn <strong className="text-primary">{selectedThesisIds.length}</strong> đăng ký
+                  </span>
+                </div>
+                <div className="flex justify-end overflow-x-auto">
+                  <Button
+                    variant="success"
+                    icon="fa-solid fa-arrow-up-right-dots"
+                    loading={convertLoading}
+                    onClick={handleConvertToThesis}
+                  >
+                    Chuyển sang khóa luận ({selectedThesisIds.length})
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 

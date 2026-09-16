@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
 import { fetchWithAuth } from "../utils/ApiHelper";
-import { endpoints } from "../config/Apis";
-import type { User, UserProfile } from "../types";
+import { endpoints, default as api } from "../config/Apis";
+import type { User } from "../types";
 
 export interface UserContextType {
   user: User | null;
@@ -21,7 +21,7 @@ export function useUser() {
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  
+
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) {
@@ -37,16 +37,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
       },
       () => {
         localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
+        localStorage.removeItem("isRefreshing");
         setUser(null);
         setLoading(false);
       }
     );
   }, []);
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await api.post(endpoints.logoutApi);
+    } catch {
+    }
     localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("isRefreshing");
     setUser(null);
   };
 

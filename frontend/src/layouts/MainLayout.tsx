@@ -12,11 +12,15 @@ const menuConfig: Record<string, any> = {
         { label: 'Trang chủ', icon: 'fa-house', path: '/' },
         { label: 'Đợt đồ án/khóa luận', icon: 'fa-chart-line', path: '/period' },
         { label: 'Đăng ký đồ án & khóa luận', icon: 'fa-file-contract', path: '/topic-registration' },
+        { label: 'Lịch bảo vệ', icon: 'fa-calendar-check', path: '/my-defense-schedules' },
         { label: 'Nộp báo cáo', icon: 'fa-cloud-arrow-up', path: '/reports' },
       ],
     },
     { group: 'Kết quả', items: [{ label: 'Điểm & Kết quả', icon: 'fa-award', path: '/grades-and-results' }] },
-    { group: 'Cá nhân', items: [{ label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' }] },
+    { group: 'Cá nhân', items: [
+      { label: 'Thông báo', icon: 'fa-bell', path: '/notifications' },
+      { label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' },
+    ] },
   ],
   lecturer: [
     {
@@ -34,10 +38,15 @@ const menuConfig: Record<string, any> = {
             { label: 'Lịch báo cáo', path: '/report-schedule' },
           ],
         },
+        { label: 'Hội đồng tham gia', icon: 'fa-people-group', path: '/my-committees' },
+        { label: 'Đợt phản biện', icon: 'fa-users-rectangle', path: '/my-reviewer-sessions' },
       ],
     },
     { group: 'Kết quả', items: [{ label: 'Điểm & Kết quả', icon: 'fa-award', path: '/grades-and-results' }] },
-    { group: 'Cá nhân', items: [{ label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' }] },
+    { group: 'Cá nhân', items: [
+      { label: 'Thông báo', icon: 'fa-bell', path: '/notifications' },
+      { label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' },
+    ] },
   ],
   staff: [
     {
@@ -46,11 +55,19 @@ const menuConfig: Record<string, any> = {
         { label: 'Trang chủ', icon: 'fa-house', path: '/' },
         { label: 'Danh sách sinh viên & đăng ký', icon: 'fa-users', path: '/students' },
         { label: 'Quản lý đợt đăng ký', icon: 'fa-folder-tree', path: '/registration-periods' },
+        { label: 'Quản lý hội đồng', icon: 'fa-people-group', path: '/manage-committees' },
+        { label: 'Quản lý phản biện', icon: 'fa-users-rectangle', path: '/manage-reviewer-sessions' },
         { label: 'Tổng quan báo cáo', icon: 'fa-calendar-days', path: '/reports-management' },
       ],
     },
-    { group: 'Kết quả', items: [{ label: 'Điều chỉnh điểm', icon: 'fa-sliders', path: '/manage-grades' }] },
-    { group: 'Cá nhân', items: [{ label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' }] },
+    { group: 'Kết quả', items: [
+      { label: 'Điểm & Kết quả', icon: 'fa-award', path: '/grades-and-results' },
+      { label: 'Điều chỉnh điểm', icon: 'fa-sliders', path: '/manage-grades' },
+    ] },
+    { group: 'Cá nhân', items: [
+      { label: 'Thông báo', icon: 'fa-bell', path: '/notifications' },
+      { label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' },
+    ] },
   ],
   admin: [
     {
@@ -65,7 +82,10 @@ const menuConfig: Record<string, any> = {
       ],
     },
     { group: 'Kết quả', items: [{ label: 'Điều chỉnh điểm', icon: 'fa-sliders', path: '/manage-grades' }] },
-    { group: 'Cá nhân', items: [{ label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' }] },
+    { group: 'Cá nhân', items: [
+      { label: 'Thông báo', icon: 'fa-bell', path: '/notifications' },
+      { label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' },
+    ] },
   ],
 };
 
@@ -204,7 +224,7 @@ export default function MainLayout() {
             )}
           </div>
           <div className="flex items-center gap-5">
-            <Button variant="ghost" size="icon" className="relative text-gray-400" icon="fa-regular fa-bell">
+            <Button variant="ghost" size="icon" className="relative text-gray-400" icon="fa-regular fa-bell" onClick={() => navigate('/notifications')}>
               <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-danger text-white text-[9px] font-bold rounded-full flex items-center justify-center ring-2 ring-white shadow-sm">
                 3
               </span>

@@ -1,4 +1,4 @@
-import Apis, { authApis, endpoints } from "../config/Apis";
+import api, { endpoints } from "../config/Apis";
 
 const extractErrorMessage = (errData: any): string => {
     if (!errData) return "Yêu cầu không hợp lệ.";
@@ -37,18 +37,13 @@ const handleError = (err: any, onError?: any) => {
     } else {
         onError?.("network", "Không thể kết nối. Kiểm tra lại mạng.");
     }
-
-    if (!status || status >= 500) {
-        console.error("API Error:", err.message || err);
-    }
 };
 
 
 export const fetchWithAuth = async (endpoint: string, onSuccess?: any, onError?: any, params: any = {}, setLoading?: any) => {
     setLoading?.(true);
     try {
-        const token = localStorage.getItem("access_token");
-        let res = await authApis(token).get(endpoint, { params });
+        let res = await api.get(endpoint, { params });
         if (res.status === 200) {
             if (res.data.results && typeof res.data.count === 'number') {
                 onSuccess(res.data.results, res.data);
@@ -63,9 +58,8 @@ export const fetchWithAuth = async (endpoint: string, onSuccess?: any, onError?:
 export const createWithAuth = async (endpoint: string, body: any, onSuccess?: any, onError?: any, setLoading?: any) => {
     setLoading?.(true);
     try {
-        const token = localStorage.getItem("access_token");
         const isFormData = body instanceof FormData;
-        let res = await authApis(token).post(endpoint, body, {
+        let res = await api.post(endpoint, body, {
             headers: isFormData ? {
                 'Content-Type': 'multipart/form-data',
             } : {}
@@ -78,8 +72,7 @@ export const createWithAuth = async (endpoint: string, body: any, onSuccess?: an
 export const updateWithAuth = async (endpoint: string, body: any, onSuccess?: any, onError?: any, setLoading?: any) => {
     setLoading?.(true);
     try {
-        const token = localStorage.getItem("access_token");
-        let res = await authApis(token).put(endpoint, body);
+        let res = await api.put(endpoint, body);
         if (res.status === 200) onSuccess(res.data);
     } catch (err) { handleError(err, onError); }
     finally { setLoading?.(false); }
@@ -88,8 +81,7 @@ export const updateWithAuth = async (endpoint: string, body: any, onSuccess?: an
 export const updatePatchWithAuth = async (endpoint: string, body: any, onSuccess?: any, onError?: any, setLoading?: any) => {
     setLoading?.(true);
     try {
-        const token = localStorage.getItem("access_token");
-        let res = await authApis(token).patch(endpoint, body);
+        let res = await api.patch(endpoint, body);
         if (res.status === 200) onSuccess(res.data);
     } catch (err) { handleError(err, onError); }
     finally { setLoading?.(false); }
@@ -98,8 +90,7 @@ export const updatePatchWithAuth = async (endpoint: string, body: any, onSuccess
 export const deleteWithAuth = async (endpoint: string, onSuccess?: any, onError?: any, setLoading?: any) => {
     setLoading?.(true);
     try {
-        const token = localStorage.getItem("access_token");
-        let res = await authApis(token).delete(endpoint);
+        let res = await api.delete(endpoint);
         if (res.status === 200 || res.status === 204) onSuccess();
     } catch (err) { handleError(err, onError); }
     finally { setLoading?.(false); }
@@ -109,7 +100,7 @@ export const deleteWithAuth = async (endpoint: string, onSuccess?: any, onError?
 export const fetchPublic = async (endpoint: string, onSuccess?: any, onError?: any, params: any = {}, setLoading?: any) => {
     setLoading?.(true);
     try {
-        let res = await Apis.get(endpoint, { params });
+        let res = await api.get(endpoint, { params });
         if (res.status === 200)
             onSuccess(res.data.results ?? res.data, res.data.next);
     } catch (err) { handleError(err, onError); }
@@ -129,12 +120,9 @@ export const createPublic = async (endpoint: string, body: any, onSuccess?: any,
                 : { 'Content-Type': 'application/json' };
 
         const mergedHeaders = { ...defaultHeaders, ...headers };
-        let res = await Apis.post(endpoint, body, { headers: mergedHeaders });
+        let res = await api.post(endpoint, body, { headers: mergedHeaders });
         if (res.status === 200 || res.status === 201) onSuccess(res.data);
     } catch (err) {
-        console.log('Error status:', err.response?.status);
-        console.log('Error data:', err.response?.data);
-        console.log('Error message:', err.message);
         handleError(err, onError);
     }
     finally {

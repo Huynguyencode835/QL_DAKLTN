@@ -2,7 +2,7 @@
 from django.utils import timezone
 from rest_framework import serializers
 from theses.models import (
-    Report, ProjectRegistration, RegistrationPeriod,
+    RegistrationLecturer, Report, ProjectRegistration, RegistrationPeriod,
 )
 
 ALLOWED_TYPES = [
@@ -71,10 +71,10 @@ class PeriodicReportUploadSerializer(BaseReportUploadSerializer):
                 {'schedule': 'Bạn không có đăng ký đề tài trong đợt của lịch báo cáo này.'}
             )
 
-        # if timezone.now() > schedule.deadline:
-        #     raise serializers.ValidationError(
-        #         {'deadline': 'Đã quá hạn nộp cho lịch báo cáo này.'}
-        #     )
+        if timezone.localtime(timezone.now()).date() != timezone.localtime(schedule.deadline).date():
+            raise serializers.ValidationError(
+                {'deadline': 'Chỉ được nộp báo cáo trong ngày hạn chót.'}
+            )
 
         data['schedule'] = schedule
         data['registration'] = registration
@@ -96,4 +96,40 @@ class FinalReportUploadSerializer(BaseReportUploadSerializer):
             )
 
         data['registration'] = registration
+        return data
+
+class FinalReportDetailSerializer(serializers.Serializer):
+    registration = serializers.IntegerField()
+
+    def validate_registration(self, value):
+        registration = ProjectRegistration.objects.filter(id=value).first()
+        if not registration:
+            raise serializers.ValidationError('Không tìm thấy đăng ký đồ án.')
+        return registration
+
+    def validate(self, data):
+        user = self.context['request'].user
+        registration = data['registration']
+
+        is_owner_student = registration.student_id == user.id
+        is_main_lecturer = registration.lecturer_assignments.filter(
+            lecturer_id=user.id,
+            role=RegistrationLecturer.Role.MAIN,
+            approval_status=RegistrationLecturer.ApprovalStatus.APPROVED,
+        ).exists()
+        is_reviewer = registration.lecturer_assignments.filter(
+            lecturer_id=user.id,
+            role=RegistrationLecturer.Role.REVIEWER,
+            approval_status=RegistrationLecturer.ApprovalStatus.APPROVED,
+        ).exists()
+        is_committee_member = (
+            registration.committee is not None
+            and registration.committee.members.filter(lecturer_id=user.id).exists()
+        )
+
+        if not (is_owner_student or is_main_lecturer or is_reviewer or is_committee_member or user.is_staff):
+            raise serializers.ValidationError(
+                'Bạn không có quyền xem báo cáo cuối kỳ của đăng ký này.'
+            )
+
         return data

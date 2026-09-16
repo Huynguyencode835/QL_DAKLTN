@@ -1,5 +1,4 @@
 import type { MouseEventHandler, ReactNode } from 'react';
-import Card from '../Ui/Card';
 import Badge from '../Ui/Badge';
 import type { BadgeVariant } from '../../types';
 
@@ -8,8 +7,6 @@ export interface ItemCard {
   title: string;
   subtitle?: ReactNode;
   icon?: string;
-  iconClassName?: string;
-  cardClassName?: string;
   badge?: { label: string; variant: BadgeVariant };
   actions?: ReactNode;
   onClick?: () => void;
@@ -35,7 +32,7 @@ export default function ItemCardGrid({
   const stopPropagation: MouseEventHandler = (e) => e.stopPropagation();
 
   return (
-    <Card variant="elevated" bodyClassName="space-y-0">
+    <div>
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
@@ -50,45 +47,44 @@ export default function ItemCardGrid({
           {items.map((item) => (
             <div
               key={item.id}
-              className={`group relative rounded-2xl p-4 transition-all duration-200 ${
+              className={`group relative rounded-2xl overflow-hidden border border-gray-100 bg-white shadow-sm transition-all duration-200 hover:shadow-md ${
                 item.onClick ? 'cursor-pointer' : ''
-              } ${item.cardClassName || 'bg-gray-50 hover:bg-gray-100'}`}
+              }`}
               onClick={handleClick(item)}
             >
-              <div className="flex items-center gap-3 mb-3">
+              {/* HEADER */}
+              <div className="bg-[#0c56d0] px-4 py-1 flex items-center gap-3">
                 {item.icon && (
-                  <span
-                    className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center ${
-                      item.iconClassName || 'bg-gray-200 text-gray-500'
-                    }`}
-                  >
-                    <i className={`fa-solid ${item.icon} text-sm`}></i>
-                  </span>
+                  <div className="w-9 h-9 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
+                    <i className={`fa-solid ${item.icon} text-white text-sm`}></i>
+                  </div>
                 )}
-                <div className="min-w-0">
-                  <h3 className="font-semibold text-gray-800 text-sm truncate">{item.title}</h3>
-                  {item.subtitle && <p className="text-xs text-gray-500">{item.subtitle}</p>}
-                </div>
+                <h3 className="font-semibold text-white text-sm truncate leading-tight">{item.title}</h3>
               </div>
 
-              {item.badge && (
-                <Badge variant={item.badge.variant} dot>
-                  {item.badge.label}
-                </Badge>
-              )}
+              {/* BODY */}
+              <div className="p-4 space-y-3">
+                {item.subtitle && (
+                  <div className="text-xs text-gray-500 leading-relaxed">{item.subtitle}</div>
+                )}
 
-              {item.actions && (
-                <div
-                  className="mt-3 pt-3 border-t border-black/5 flex items-center justify-end gap-2"
-                  onClick={stopPropagation}
-                >
-                  {item.actions}
-                </div>
-              )}
+                {item.badge && (
+                  <Badge variant={item.badge.variant} dot>{item.badge.label}</Badge>
+                )}
+
+                {item.actions && (
+                  <div
+                    className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2"
+                    onClick={stopPropagation}
+                  >
+                    {item.actions}
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>
       )}
-    </Card>
+    </div>
   );
 }

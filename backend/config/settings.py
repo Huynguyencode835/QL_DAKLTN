@@ -17,6 +17,7 @@ import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+load_dotenv(BASE_DIR / '.env')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
@@ -40,6 +41,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5000",
     "https://thesis-portal-ou.vercel.app",
 ]
+CORS_ALLOW_CREDENTIALS = True
+
+OAUTH_CLIENT_ID = os.getenv('CLIENT_ID')
+OAUTH_CLIENT_SECRET = os.getenv('CLIENT_SECRET')
 
 # Application definition
 
@@ -70,7 +75,36 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-OAUTH2_PROVIDER = { 'OAUTH2_BACKEND_CLASS': 'oauth2_provider.oauth2_backends.JSONOAuthLibCore'}
+# ============================================
+# CACHE
+# ============================================
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": os.getenv('REDIS_URL'),
+        "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
+        "KEY_PREFIX": "cache",
+        "TIMEOUT": 300,
+    }
+}
+
+# ============================================
+# CELERY (dùng ETA task, KHÔNG cần CELERY_BEAT_SCHEDULE)
+# ============================================
+CELERY_BROKER_URL = os.getenv('REDIS_URL')
+CELERY_RESULT_BACKEND = None
+CELERY_TASK_IGNORE_RESULT = True
+
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = 'UTC'
+
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    "global_keyprefix": "celery:",
+}
+
+# OAUTH2_PROVIDER = { 'OAUTH2_BACKEND_CLASS': 'oauth2_provider.oauth2_backends.JSONOAuthLibCore'}
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
@@ -84,7 +118,7 @@ ROOT_URLCONF = 'config.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -105,7 +139,6 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 
-load_dotenv()
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -157,3 +190,21 @@ STATIC_URL = 'static/'
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
+
+
+# ============================================
+# EMAIL
+# ============================================
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
+
+# ============================================
+# FRONTEND
+# ============================================
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+

@@ -1,12 +1,11 @@
 import { FileUp } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { usePeriod } from '../../hooks';
 import { PeriodCardRow, PeriodCardCountdown, PeriodCardAction } from './PeriodCardShared';
 import { daysLeft, formatPeriodDate, reportSubmissionEnd, reportSubmissionStart } from '../../utils/periodUtils';
+import type { Period } from '../../types';
 
-export default function PeriodCardReportSubmission() {
+export default function PeriodCardReportSubmission({ period, action }: { period: Period; action?: { label: string; icon: string; onClick: () => void } | null }) {
   const navigate = useNavigate();
-  const { period } = usePeriod();
   if (!period) return null;
   const isActive = period.status === 'report_submission';
   const start = reportSubmissionStart(period);
@@ -41,13 +40,13 @@ export default function PeriodCardReportSubmission() {
         subColor={isActive ? 'text-red-400' : 'text-gray-400'}
       />
 
-      {isActive && (
+      {isActive && action !== null && (
         <PeriodCardAction
-          label="Nộp báo cáo"
-          icon="fa-solid fa-file-arrow-up"
+          label={action?.label || 'Nộp báo cáo'}
+          icon={action?.icon || 'fa-solid fa-file-arrow-up'}
           badgeBg="bg-green-100"
           badgeText="text-green-600"
-          onClick={() => navigate('/reports')}
+          onClick={action?.onClick || (() => navigate('/reports'))}
         />
       )}
     </div>

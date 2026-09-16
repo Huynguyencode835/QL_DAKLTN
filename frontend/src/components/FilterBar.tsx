@@ -31,6 +31,10 @@ export interface FilterBarProps {
   onRefresh?: () => void;
   refreshLoading?: boolean;
   refreshLabel?: string;
+
+  // Action button(s) bên phải
+  actions?: React.ReactNode;
+  isSearch?: Boolean;
 }
 
 export default function FilterBar({
@@ -41,18 +45,23 @@ export default function FilterBar({
   onRefresh,
   refreshLoading,
   refreshLabel = 'Làm mới',
+  actions,
+  isSearch = true
 }: FilterBarProps) {
   return (
     <Card variant="elevated" bodyClassName="space-y-4">
       <div className="flex flex-col sm:flex-row gap-4">
-        <div className="flex-1">
-          <Input
-            placeholder={searchPlaceholder}
-            leadingIcon="fa-solid fa-magnifying-glass"
-            value={searchValue}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => onSearchChange(e.target.value)}
-          />
-        </div>
+        {isSearch === true && (
+          <div className="flex-1">
+            <Input
+              placeholder={searchPlaceholder}
+              leadingIcon="fa-solid fa-magnifying-glass"
+              value={searchValue}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => onSearchChange(e.target.value)}
+            />
+          </div>
+        )}
+
 
         {dropdowns.map((dd) => (
           <div key={dd.key} className={dd.widthClassName ?? 'w-full sm:w-56'}>
@@ -64,6 +73,8 @@ export default function FilterBar({
             />
           </div>
         ))}
+
+        {actions && <div className="flex items-center gap-2">{actions}</div>}
 
         {onRefresh && (
           <Button variant="primary" icon="fa-solid fa-rotate" onClick={onRefresh} loading={refreshLoading}>

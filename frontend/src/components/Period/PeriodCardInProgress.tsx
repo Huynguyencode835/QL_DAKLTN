@@ -1,12 +1,11 @@
 import { Hourglass } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { usePeriod } from '../../hooks';
 import { PeriodCardRow, PeriodCardCountdown, PeriodCardAction } from './PeriodCardShared';
 import { daysLeft, formatPeriodDate, reportSubmissionStart, studentRegistrationEnd } from '../../utils/periodUtils';
+import type { Period } from '../../types';
 
-export default function PeriodCardInProgress() {
+export default function PeriodCardInProgress({ period, action }: { period: Period; action?: { label: string; icon: string; onClick: () => void } | null }) {
   const navigate = useNavigate();
-  const { period } = usePeriod();
   if (!period) return null;
   const isActive = period.status === 'in_progress';
   const start = studentRegistrationEnd(period);
@@ -41,13 +40,13 @@ export default function PeriodCardInProgress() {
         subColor={isActive ? 'text-amber-400' : 'text-gray-400'}
       />
 
-      {isActive && (
+      {isActive && action !== null && (
         <PeriodCardAction
-          label="Nộp báo cáo định kỳ"
-          icon="fa-regular fa-file-lines"
+          label={action?.label || 'Nộp báo cáo định kỳ'}
+          icon={action?.icon || 'fa-regular fa-file-lines'}
           badgeBg="bg-amber-100"
           badgeText="text-amber-600"
-          onClick={() => navigate('/reports')}
+          onClick={action?.onClick || (() => navigate('/reports'))}
         />
       )}
     </div>

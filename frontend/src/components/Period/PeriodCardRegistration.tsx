@@ -1,12 +1,11 @@
 import { CalendarClock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { usePeriod } from '../../hooks';
 import { PeriodCardRow, PeriodCardCountdown, PeriodCardAction } from './PeriodCardShared';
 import { daysLeft, formatPeriodDate, studentRegistrationEnd } from '../../utils/periodUtils';
+import type { Period } from '../../types';
 
-export default function PeriodCardRegistration({ hideAction = false }: { hideAction?: boolean }) {
+export default function PeriodCardRegistration({ period, hideAction = false, action }: { period: Period; hideAction?: boolean; action?: { label: string; icon: string; onClick: () => void } | null }) {
   const navigate = useNavigate();
-  const { period } = usePeriod();
   if (!period) return null;
   const isActive = period.status === 'student_registration';
   const end = studentRegistrationEnd(period);
@@ -40,13 +39,13 @@ export default function PeriodCardRegistration({ hideAction = false }: { hideAct
         subColor={isActive ? 'text-blue-400' : 'text-gray-400'}
       />
 
-      {isActive && !hideAction && (
+      {isActive && !hideAction && action !== null && (
         <PeriodCardAction
-          label="Đăng ký ngay"
-          icon="fa-solid fa-user-plus"
+          label={action?.label || 'Đăng ký ngay'}
+          icon={action?.icon || 'fa-solid fa-user-plus'}
           badgeBg="bg-blue-100"
           badgeText="text-blue-600"
-          onClick={() => navigate('/topic-registration')}
+          onClick={action?.onClick || (() => navigate('/topic-registration'))}
         />
       )}
     </div>

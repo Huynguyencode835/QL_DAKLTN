@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useUser, useModal, usePageHeader, useToast } from '../../hooks';
+import { usePeriod } from '../../contexts/PeriodContext';
 import { fetchWithAuth, createWithAuth } from '../../utils/ApiHelper';
 import { endpoints } from '../../config/Apis';
 import { SectionCard } from '../../components/Ui/Card';
@@ -16,6 +17,7 @@ import InfoTile from '../../components/Ui/InfoTile';
 
 export default function TopicRegistration() {
   const { user } = useUser();
+  const { projectPeriod } = usePeriod();
   const { openModal, closeModal } = useModal();
   const toast = useToast();
   const p = user?.profile || {};
@@ -64,7 +66,7 @@ export default function TopicRegistration() {
     }));
     loadLecturers();
     fetchWithAuth(
-      endpoints.registrations("current"),
+      endpoints.registrations("current-project"),
       (data: any[]) => {
         if (data && data.length > 0) {
           setExistingRegistration(data[0]);
@@ -180,9 +182,20 @@ export default function TopicRegistration() {
     };
 
     await createWithAuth(
-      endpoints.registrations("current"),
+      endpoints.registrations("current-project"),
       body,
-      () => toast.success('Đăng ký thành công', 'Đơn đăng ký của bạn đã được gửi'),
+      () => {
+        toast.success('Đăng ký thành công', 'Đơn đăng ký của bạn đã được gửi');
+        fetchWithAuth(
+          endpoints.registrations("current-project"),
+          (data: any[]) => {
+            if (data && data.length > 0) {
+              setExistingRegistration(data[0]);
+            }
+          },
+          () => {},
+        );
+      },
       (type: string, msg: string) => {
         toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
       },
@@ -214,6 +227,47 @@ export default function TopicRegistration() {
         <div className="flex flex-col items-center gap-3 text-gray-400">
           <i className="fa-solid fa-spinner fa-spin text-3xl"></i>
           <p className="text-sm">Đang tải thông tin đăng ký...</p>
+        </div>
+      </main>
+    );
+  }
+
+  const now = new Date();
+  const regStart = projectPeriod ? new Date(projectPeriod.student_registration_start) : null;
+  const regEnd = projectPeriod ? new Date(projectPeriod.student_registration_end) : null;
+  const isRegistrationOpen =
+    projectPeriod &&
+    projectPeriod.status === 'student_registration' &&
+    regStart && regEnd &&
+    now >= regStart && now <= regEnd;
+
+  if (!projectPeriod) {
+    return (
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-gray-400">
+          <i className="fa-regular fa-folder-open text-4xl"></i>
+          <p className="text-sm font-medium">Hiện tại khoa của bạn chưa có đợt thực hiện nào.</p>
+          <p className="text-xs">Vui lòng quay lại sau khi giáo vụ công bố đợt đăng ký mới.</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!isRegistrationOpen) {
+    let message = '';
+    if (projectPeriod.status === 'scheduled' && regStart && now < regStart) {
+      message = 'Chưa tới ngày đăng ký. Vui lòng quay lại sau.';
+    } else if (projectPeriod.status === 'closed' || projectPeriod.status === 'in_progress' || projectPeriod.status === 'report_submission') {
+      message = 'Đợt đăng ký đã đóng. Không thể đăng ký thêm.';
+    } else {
+      message = 'Đợt đăng ký hiện tại chưa mở. Vui lòng quay lại sau.';
+    }
+    return (
+      <main className="flex-1 overflow-y-auto p-4 md:p-6 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-gray-400">
+          <i className="fa-regular fa-clock text-4xl"></i>
+          <p className="text-sm font-medium">{message}</p>
+          <p className="text-xs">Đợt: {projectPeriod.name}</p>
         </div>
       </main>
     );
@@ -328,7 +382,7 @@ export default function TopicRegistration() {
           </div>
 
           <aside className="lg:sticky">
-            <PeriodCardRegistration hideAction />
+            <PeriodCardRegistration period={projectPeriod} hideAction />
           </aside>
         </div>
       </main>
@@ -511,7 +565,7 @@ export default function TopicRegistration() {
         </form>
         <div>
           <aside className="lg:sticky">
-            <PeriodCardRegistration hideAction />
+            <PeriodCardRegistration period={projectPeriod} hideAction />
           </aside>
 
           <div className=" mt-6 p-4 bg-blue-50 border border-blue-100 rounded-lg flex items-start gap-3">

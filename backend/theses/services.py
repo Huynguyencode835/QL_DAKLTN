@@ -1,4 +1,5 @@
 from theses.models import ProjectRegistration, RegistrationLecturer, RegistrationPeriod
+from django.utils import timezone
 
 
 def get_lecturer_remaining_slots(lecturer):
@@ -19,11 +20,16 @@ def get_lecturer_remaining_slots(lecturer):
     return profile.academic_degree.max_students_quota - current_count
 
 
-def _reevaluate_main_candidate(registration):
+def _reevaluate_main_candidate(registration, expire_pending=False):
     """Xác định lại GVHD chính thức (MAIN) cho 1 registration dựa trên priority.
 
-    Gọi sau mỗi lần 1 nguyện vọng được approve/reject. Đây là điểm xử lý trung tâm
-    duy nhất cho việc promote MAIN + skip các nguyện vọng còn lại.
+    Gọi sau mỗi lần 1 nguyện vọng được approve/reject (expire_pending=False —
+    mặc định, gặp PENDING thì dừng lại chờ người đó phản hồi).
+
+    expire_pending=True: dùng khi HẾT HẠN ĐĂNG KÝ (Celery gọi lúc chuyển
+    STUDENT_REGISTRATION -> IN_PROGRESS). Nguyện vọng PENDING lúc này không
+    còn được chờ nữa — coi như hết hạn phản hồi, tự động REJECTED, xét tiếp
+    xuống nguyện vọng ưu tiên thấp hơn.
     """
     candidate = (
         registration.lecturer_assignments
@@ -38,21 +44,31 @@ def _reevaluate_main_candidate(registration):
     )
 
     if candidate is None:
-        # Tất cả nguyện vọng đều bị từ chối/loại -> chờ giáo vụ phân công thủ công
         if registration.status != ProjectRegistration.STATUS.WAITING_STAFF_ASSIGNMENT:
             registration.status = ProjectRegistration.STATUS.WAITING_STAFF_ASSIGNMENT
             registration.save(update_fields=['status', 'updated_date'])
         return
 
     if candidate.approval_status == RegistrationLecturer.ApprovalStatus.PENDING:
+        if not expire_pending:
+            return   # còn trong hạn -> chờ giảng viên này phản hồi
+
+        # THÊM: hết hạn -> coi nguyện vọng này là hết hạn phản hồi, tự REJECTED
+        candidate.approval_status = RegistrationLecturer.ApprovalStatus.REJECTED
+        candidate.responded_at = timezone.now()
+        candidate.note = (
+            (candidate.note + ' ' if candidate.note else '')
+            + '[Hệ thống tự động từ chối: giảng viên không phản hồi trước khi hết hạn đăng ký.]'
+        )
+        candidate.save(update_fields=['approval_status', 'responded_at', 'note', 'updated_date'])
+
+        _reevaluate_main_candidate(registration, expire_pending=True)
         return
 
     if candidate.approval_status == RegistrationLecturer.ApprovalStatus.APPROVED:
         remaining = get_lecturer_remaining_slots(candidate.lecturer)
 
         if remaining < 0:
-            # Hết slot tại thời điểm xét -> tự động reject nguyện vọng này,
-            # đẩy về cho giáo vụ phân công thủ công.
             candidate.approval_status = RegistrationLecturer.ApprovalStatus.REJECTED
             candidate.responded_at = timezone.now()
             candidate.note = (
@@ -62,9 +78,10 @@ def _reevaluate_main_candidate(registration):
             )
             candidate.save(update_fields=['approval_status', 'responded_at', 'note', 'updated_date'])
 
-            # Xét tiếp candidate kế tiếp theo priority (hoặc rơi vào WAITING_STAFF_ASSIGNMENT
-            # nếu không còn ai).
-            self._reevaluate_main_candidate(registration)
+            # THAY: phải truyền lại expire_pending, nếu không sẽ luôn reset về
+            # False khi đệ quy -> mất chế độ "hết hạn" giữa chừng, quay lại
+            # hành vi "chờ" sai cho các PENDING phía sau trong cùng 1 lượt gọi.
+            _reevaluate_main_candidate(registration, expire_pending=expire_pending)
             return
 
         if candidate.role != RegistrationLecturer.Role.MAIN:

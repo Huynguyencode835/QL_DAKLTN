@@ -1,0 +1,52 @@
+{% extends "email/base_email.html" %}
+
+{% block content %}
+<!-- Icon -->
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 20px;">
+    <tr>
+        <td style="width:48px; height:48px; background-color:#fffbeb; border-radius:50%; text-align:center; line-height:48px;">
+            <span style="font-size:22px; color:#f59e0b;">&#9888;</span>
+        </td>
+    </tr>
+</table>
+
+<!-- Title -->
+<h2 style="margin:0 0 12px; color:#1f2937; font-size:18px; font-weight:600; text-align:center;">
+    {{ title }}
+</h2>
+
+<!-- Message -->
+<p style="margin:0 0 24px; color:#4b5563; font-size:15px; line-height:1.6; text-align:center;">
+    Xin {{ student_name|default:"bạn" }},<br>
+    {{ message }}
+</p>
+
+{% if details %}
+<!-- Details table -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px; background-color:#f9fafb; border-radius:8px; border:1px solid #e5e7eb;">
+    {% for label, value in details %}
+    <tr>
+        <td style="padding:10px 16px; font-size:13px; color:#6b7280; border-bottom:{% if not forloop.last %}1px solid #e5e7eb{% else %}none{% endif %};">
+            {{ label }}
+        </td>
+        <td style="padding:10px 16px; font-size:13px; color:#1f2937; font-weight:500; text-align:right; border-bottom:{% if not forloop.last %}1px solid #e5e7eb{% else %}none{% endif %};">
+            {{ value }}
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+{% endif %}
+
+{% if action_url %}
+<!-- CTA Button -->
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto;">
+    <tr>
+        <td style="background-color:#f59e0b; border-radius:8px;">
+            <a href="{{ action_url }}" style="display:inline-block; padding:12px 28px; color:#ffffff; font-size:14px; font-weight:600; text-decoration:none;">
+                {{ action_label|default:"Xem chi tiết" }}
+            </a>
+        </td>
+    </tr>
+</table>
+{% endif %}
+{% endblock %}

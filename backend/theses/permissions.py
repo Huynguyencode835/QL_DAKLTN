@@ -1,7 +1,7 @@
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 
-from theses.models import User, ProjectRegistration, RegistrationLecturer
+from theses.models import CommitteeMember, User, ProjectRegistration, RegistrationLecturer
 
 
 class IsStudentRole(IsAuthenticated):
@@ -108,10 +108,11 @@ class IsRegistrationOwnerOrStaff(IsAuthenticated):
             return False
         if request.user.role == User.Role.STUDENT and obj.student == request.user:
             return True
-        if request.user.role == User.Role.LECTURER and obj.lecturer_assignments.filter(
-            lecturer=request.user,
-        ).exists():
-            return True
+        if request.user.role == User.Role.LECTURER:
+            if obj.lecturer_assignments.filter(lecturer=request.user).exists():
+                return True
+            if obj.committee_id and obj.committee.members.filter(lecturer=request.user).exists():
+                return True
         if request.user.role == User.Role.STAFF:
             return (
                 request.user.faculty is not None and
@@ -229,10 +230,20 @@ class CanAccessReport(IsAuthenticated):
         if user.role == User.Role.STUDENT:
             return registration.student_id == user.id
         if user.role == User.Role.LECTURER:
-            return registration.lecturer_assignments.filter(
+            is_assigned_lecturer = registration.lecturer_assignments.filter(
                 lecturer_id=user.id,
-                role=RegistrationLecturer.Role.MAIN,
+                role__in=[
+                    RegistrationLecturer.Role.MAIN,
+                    RegistrationLecturer.Role.REVIEWER,
+                ],
             ).exists()
+            is_committee_member = (
+                registration.committee is not None
+                and registration.committee.members.filter(
+                    lecturer_id=user.id
+                ).exists()
+            )
+            return is_assigned_lecturer or is_committee_member
         if user.role == User.Role.STAFF:
             return (user.faculty is not None and
                     registration.student.faculty == user.faculty)
@@ -267,4 +278,48 @@ class CanCreateReport(IsAuthenticated):
             return False
         if request.user.role != User.Role.STUDENT:
             raise PermissionDenied('Chỉ sinh viên mới được nộp báo cáo')
+        return True
+
+
+class IsLecturerForGrade(IsAuthenticated):
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+
+        # Staff được phép xem (GET/HEAD/OPTIONS)
+        if request.user.role == User.Role.STAFF and request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return True
+
+        if request.user.role != User.Role.LECTURER:
+            return False
+
+        registration_id = (
+            request.data.get('registration')
+            or request.query_params.get('registration')
+        )
+        if not registration_id:
+            return True
+
+        try:
+            registration = ProjectRegistration.objects.get(pk=registration_id, active=True)
+        except ProjectRegistration.DoesNotExist:
+            return False
+
+        rl = RegistrationLecturer.objects.filter(
+            registration=registration, lecturer=request.user,
+        ).first()
+
+        is_committee_member = False
+        if registration.committee_id:
+            is_committee_member = CommitteeMember.objects.filter(
+                committee_id=registration.committee_id,
+                lecturer=request.user,
+            ).exists()
+
+        if not rl and not is_committee_member:
+            return False
+
+        if rl:
+            view._registration_lecturer = rl
+
         return True

@@ -16,7 +16,7 @@ export default function ReportsManagement() {
     const { user } = useUser();
     const role = user?.role || user?.user_type || 'lecturer';
     const isLecturer = role === 'lecturer';
-    const [selectedPeriodId, setSelectedPeriodId] = useState<string>('current');
+    const [selectedPeriodId, setSelectedPeriodId] = useState<string>('current-project');
     const [periodsLoading, setPeriodsLoading] = useState(true);
     const [registrationPeriods, setRegistrationPeriods] = useState<RegistrationPeriod[]>([]);
     const [loading, setLoading] = useState(true);
@@ -34,7 +34,7 @@ export default function ReportsManagement() {
         await fetchWithAuth(
             endpoints.registrationPeriods,
             (data: RegistrationPeriod[]) => setRegistrationPeriods(data),
-            (err: any) => console.error('Lỗi tải đợt đăng ký:', err),
+            () => {},
             {},
             setPeriodsLoading
         );
@@ -44,7 +44,7 @@ export default function ReportsManagement() {
         await fetchWithAuth(
             endpoints.schedules(selectedPeriodId),
             (data: Schedules[]) => setSchedules(data),
-            (err: any) => console.error('Lỗi tải lịch báo cáo:', err),
+            () => {},
             {},
             () => setSchedulesLoading(false)
         );
@@ -61,7 +61,7 @@ export default function ReportsManagement() {
                 setReportsMatrix({ columns: data.columns, rows: data.rows });
                 if (typeof data.count === 'number') setTotalCount(data.count);
             },
-            (err: any) => console.error('Lỗi tải bảng báo cáo:', err),
+            () => {},
             params,
             setLoading
         );
@@ -109,14 +109,18 @@ export default function ReportsManagement() {
                     const entry = row.reports[col.key];
                     if (!entry) return <span className="text-gray-300">—</span>;
                     const variantMap: Record<string, string> = {
-                        submitted: 'success',
+                        submitted: 'info',
+                        reviewed: 'warning',
                         approved: 'success',
                         rejected: 'danger',
+                        late: 'danger',
                     };
                     const labelMap: Record<string, string> = {
                         submitted: 'Đã nộp',
+                        reviewed: 'Đã xem',
                         approved: 'Đã duyệt',
-                        rejected: 'Từ chối',
+                        rejected: 'Yêu cầu nộp lại',
+                        late: 'Nộp trễ',
                     };
                     const v = variantMap[entry.status] || 'neutral';
                     const l = labelMap[entry.status] || 'Chưa nộp';
@@ -156,7 +160,8 @@ export default function ReportsManagement() {
                             loading: periodsLoading,
                             widthClassName: 'w-full sm:w-64',
                             options: [
-                                { value: 'current', label: 'Đợt hiện tại (đang mở)' },
+                                { value: 'current-project', label: 'Đợt đồ án hiện tại' },
+                                { value: 'current-thesis', label: 'Đợt khóa luận hiện tại' },
                                 ...registrationPeriods.map((p) => ({
                                     value: String(p.id),
                                     label: `${p.name} (${p.academic_year})`,

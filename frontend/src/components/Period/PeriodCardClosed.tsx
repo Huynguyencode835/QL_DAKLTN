@@ -1,10 +1,11 @@
 import { Lock } from 'lucide-react';
-import { usePeriod } from '../../hooks';
-import { PeriodCardRow, PeriodCardGuide } from './PeriodCardShared';
+import { useNavigate } from 'react-router-dom';
+import { PeriodCardRow, PeriodCardGuide, PeriodCardAction } from './PeriodCardShared';
 import { formatPeriodDate, reportSubmissionEnd } from '../../utils/periodUtils';
+import type { Period } from '../../types';
 
-export default function PeriodCardClosed() {
-  const { period } = usePeriod();
+export default function PeriodCardClosed({ period, action }: { period: Period; action?: { label: string; icon: string; onClick: () => void } | null }) {
+  const navigate = useNavigate();
   if (!period) return null;
   const isActive = period.status === 'closed';
   const end = reportSubmissionEnd(period);
@@ -27,7 +28,17 @@ export default function PeriodCardClosed() {
         <PeriodCardRow icon="fa-solid fa-lock" label="Trạng thái" value="Không thể chỉnh sửa" />
       </div>
 
-      <PeriodCardGuide message="Đợt đã kết thúc, liên hệ khoa nếu cần hỗ trợ." />
+      {isActive && action !== null ? (
+        <PeriodCardAction
+          label={action?.label || 'Xem kết quả'}
+          icon={action?.icon || 'fa-solid fa-award'}
+          badgeBg="bg-gray-100"
+          badgeText="text-gray-600"
+          onClick={action?.onClick || (() => navigate('/grades-and-results'))}
+        />
+      ) : (
+        <PeriodCardGuide message="Đợt đã kết thúc, liên hệ khoa nếu cần hỗ trợ." />
+      )}
     </div>
   );
 }

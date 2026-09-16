@@ -1,5 +1,5 @@
 import { CalendarClock, FileUp, Hourglass, Lock } from 'lucide-react';
-import { PeriodStatus } from './models';
+import { PeriodStatus, CommitteeStatus, CommitteeMemberRole, ReviewerApprovalStatus } from './models';
 import type { BadgeVariant } from './ui';
 
 export const DIFFICULTY_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = {
@@ -21,6 +21,26 @@ export const STATUS_CONFIG: Record<string, { label: string; variant: BadgeVarian
   approved: { label: 'Đã duyệt', variant: 'success' },
   rejected: { label: 'Từ chối', variant: 'danger' },
   pending: { label: 'Chờ duyệt', variant: 'warning' },
+  skipped: { label: 'Không cần', variant: 'neutral' },
+};
+
+export const COMMITTEE_STATUS_CONFIG: Record<CommitteeStatus, { label: string; variant: BadgeVariant }> = {
+  not_started: { label: 'Chưa diễn ra', variant: 'info' },
+  in_progress: { label: 'Đang diễn ra', variant: 'success' },
+  completed: { label: 'Kết thúc', variant: 'neutral' },
+};
+
+export const COMMITTEE_ROLE_CONFIG: Record<CommitteeMemberRole, { label: string; variant: BadgeVariant }> = {
+  chair: { label: 'Chủ tịch hội đồng', variant: 'primary' },
+  secretary: { label: 'Thư ký', variant: 'info' },
+  member: { label: 'Ủy viên', variant: 'neutral' },
+  reviewer: { label: 'Phản biện', variant: 'warning' },
+};
+
+export const REVIEWER_APPROVAL_STATUS_CONFIG: Record<ReviewerApprovalStatus, { label: string; variant: BadgeVariant }> = {
+  pending: { label: 'Chờ duyệt', variant: 'warning' },
+  approved: { label: 'Đã duyệt', variant: 'success' },
+  rejected: { label: 'Từ chối', variant: 'danger' },
   skipped: { label: 'Không cần', variant: 'neutral' },
 };
 
@@ -124,9 +144,37 @@ export const ACTION_CONFIG: Partial<Record<PeriodStatus, { label: string; icon: 
   report_submission: { label: 'Nộp báo cáo', icon: 'fa-solid fa-file-arrow-up', to: '/reports' },
 };
 
+export const ROLE_ACTION_CONFIG: Record<string, Partial<Record<PeriodStatus, { label: string; icon: string; to: string }>>> = {
+  student: {
+    student_registration: { label: 'Đăng ký ngay', icon: 'fa-solid fa-user-plus', to: '/topic-registration' },
+    in_progress: { label: 'Nộp báo cáo định kỳ', icon: 'fa-regular fa-file-lines', to: '/reports' },
+    report_submission: { label: 'Nộp báo cáo', icon: 'fa-solid fa-file-arrow-up', to: '/reports' },
+    closed: { label: 'Xem kết quả', icon: 'fa-solid fa-award', to: '/grades-and-results' },
+  },
+  lecturer: {
+    student_registration: { label: 'Quản lý đề tài', icon: 'fa-solid fa-list-check', to: '/topic-management' },
+    in_progress: { label: 'Quản lý báo cáo', icon: 'fa-solid fa-calendar-days', to: '/reports-management' },
+    report_submission: { label: 'Xem báo cáo', icon: 'fa-solid fa-file-lines', to: '/reports-management' },
+    closed: { label: 'Xem điểm', icon: 'fa-solid fa-award', to: '/grades-and-results' },
+  },
+  staff: {
+    student_registration: { label: 'Quản lý đợt đăng ký', icon: 'fa-solid fa-folder-tree', to: '/registration-periods' },
+    in_progress: { label: 'Quản lý sinh viên', icon: 'fa-solid fa-users', to: '/students' },
+    report_submission: { label: 'Tổng quan báo cáo', icon: 'fa-solid fa-calendar-days', to: '/reports-management' },
+    closed: { label: 'Quản lý hội đồng', icon: 'fa-solid fa-people-group', to: '/manage-committees' },
+  },
+};
+
 export interface PeriodRow {
   icon: string;
   label: string;
   value: string;
   danger?: boolean;
 }
+
+export const NOTIFICATION_TYPE_CONFIG: Record<string, { label: string; icon: string; color: string; bg: string }> = {
+  info: { label: 'Thông tin', icon: 'fa-solid fa-circle-info', color: 'text-blue-500', bg: 'bg-blue-50' },
+  success: { label: 'Thành công', icon: 'fa-solid fa-circle-check', color: 'text-green-500', bg: 'bg-green-50' },
+  warning: { label: 'Cảnh báo', icon: 'fa-solid fa-triangle-exclamation', color: 'text-amber-500', bg: 'bg-amber-50' },
+  error: { label: 'Lỗi', icon: 'fa-solid fa-circle-xmark', color: 'text-red-500', bg: 'bg-red-50' },
+};

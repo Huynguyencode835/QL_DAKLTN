@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useUser, usePageHeader, useToast, useReportDetail } from '../../hooks';
+import { useUser, usePageHeader, useToast, useReportDetail, usePeriod } from '../../hooks';
 import { REPORT_STATUS_CONFIG, formatFileSize, formatDate } from '../../hooks/useReportDetail';
 import { fetchWithAuth, createWithAuth } from '../../utils/ApiHelper';
 import { endpoints } from '../../config/Apis';
@@ -47,7 +47,17 @@ export default function ReportsUpLoad() {
   const { user } = useUser();
   const toast = useToast();
   const { openDetail, handleDownload, detailLoading } = useReportDetail();
-  const [registration, setRegistration] = useState<any | null>(null);
+  const { projectPeriod, thesisPeriod } = usePeriod();
+
+  const [tab, setTab] = useState<'project' | 'thesis'>('project');
+  const [regProject, setRegProject] = useState<any | null>(null);
+  const [regThesis, setRegThesis] = useState<any | null>(null);
+
+  const registration = tab === 'project' ? regProject : regThesis;
+  const currentPeriod = tab === 'project' ? projectPeriod : thesisPeriod;
+  const matrixPeriodKey = tab === 'project' ? 'current-project' : 'current-thesis';
+  const hasBoth = !!(regProject && regThesis);
+
   const [matrixColumns, setMatrixColumns] = useState<MatrixColumn[]>([]);
   const [matrixReports, setMatrixReports] = useState<Record<string, MatrixCell>>({});
   const [schedules, setSchedules] = useState<Schedules[]>([]);
@@ -94,20 +104,31 @@ export default function ReportsUpLoad() {
 
   useEffect(() => {
     if (!user) return;
-    fetchWithAuth(
-      endpoints.registrations("current"),
-      (data: any[]) => {
-        const reg = data && data.length > 0 ? data[0] : null;
-        setRegistration(reg);
-        setLoading(false);
-      },
-      () => setLoading(false),
-    );
+    let cancelled = false;
+
+    const fetchReg = (key: string) =>
+      new Promise<any | null>((resolve) => {
+        fetchWithAuth(
+          endpoints.registrations(key),
+          (d: any[]) => resolve(d?.[0] || null),
+          () => resolve(null),
+        );
+      });
+
+    Promise.all([fetchReg('current-project'), fetchReg('current-thesis')]).then(([p, t]) => {
+      if (cancelled) return;
+      setRegProject(p);
+      setRegThesis(t);
+      if (!p && t) setTab('thesis');
+      setLoading(false);
+    });
+
+    return () => { cancelled = true; };
   }, [user]);
 
   const loadMatrix = async () => {
     await fetchWithAuth(
-      endpoints.reportMatrix('current'),
+      endpoints.reportMatrix(matrixPeriodKey),
       (data: { columns: MatrixColumn[]; rows: { reports: Record<string, MatrixCell> }[] }) => {
         setMatrixColumns(data?.columns || []);
         setMatrixReports(data?.rows?.[0]?.reports || {});
@@ -123,9 +144,10 @@ export default function ReportsUpLoad() {
   };
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !registration) return;
+    setLoadingReports(true);
     loadMatrix();
-  }, [user]);
+  }, [user, matrixPeriodKey, registration]);
 
   useEffect(() => {
     const periodId = registration?.registration_period;
@@ -139,6 +161,11 @@ export default function ReportsUpLoad() {
       () => setLoadingSchedules(false),
     );
   }, [registration, form.report_type]);
+
+  useEffect(() => {
+    setForm({ ...emptyForm });
+    setSchedules([]);
+  }, [tab]);
 
   const handleSubmit = async (e: any) => {
     e.preventDefault();
@@ -200,10 +227,10 @@ export default function ReportsUpLoad() {
     );
   }
 
-  return (
-    <main className="flex-1 overflow-y-auto p-4 md:p-6">
-      <div className="max-w-7xl mx-auto w-full space-y-6">
-        {!registration ? (
+  if (!regProject && !regThesis) {
+    return (
+      <main className="flex-1 overflow-y-auto p-4 md:p-6">
+        <div className="max-w-7xl mx-auto w-full">
           <Card
             variant="soft"
             icon="fa-solid fa-circle-info"
@@ -213,6 +240,47 @@ export default function ReportsUpLoad() {
           >
             <p className="text-sm text-blue-700">
               Bạn chưa có đăng ký đồ án / khóa luận nào đang mở. Vui lòng đăng ký đề tài trước khi nộp báo cáo.
+            </p>
+          </Card>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="flex-1 overflow-y-auto p-4 md:p-6">
+      <div className="max-w-7xl mx-auto w-full space-y-6">
+        {hasBoth && (
+          <div className="flex gap-2 bg-gray-100 p-1 rounded-xl w-fit">
+            <button
+              onClick={() => setTab('project')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                tab === 'project' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Đồ án
+            </button>
+            <button
+              onClick={() => setTab('thesis')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                tab === 'thesis' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Khóa luận
+            </button>
+          </div>
+        )}
+
+        {!registration ? (
+          <Card
+            variant="soft"
+            icon="fa-solid fa-circle-info"
+            title={`Chưa có đăng ký ${tab === 'project' ? 'đồ án' : 'khóa luận'}`}
+            className="!p-4 bg-blue-50/60 border-blue-100"
+            bodyClassName="!p-0"
+          >
+            <p className="text-sm text-blue-700">
+              Bạn chưa có đăng ký {tab === 'project' ? 'đồ án' : 'khóa luận'} nào đang mở. Vui lòng đăng ký đề tài trước khi nộp báo cáo.
             </p>
           </Card>
         ) : (
@@ -404,8 +472,8 @@ export default function ReportsUpLoad() {
                   </div>
                 </Card>
 
-                <PeriodCardInProgress />
-                <PeriodCardReportSubmission />
+                {currentPeriod && <PeriodCardInProgress period={currentPeriod} />}
+                {currentPeriod && <PeriodCardReportSubmission period={currentPeriod} />}
 
               </div>
             </div>
@@ -415,17 +483,5 @@ export default function ReportsUpLoad() {
         )}
       </div>
     </main>
-  );
-}
-
-function StatBox({ icon, label, value, color }: { icon: string; label: string; value: number; color: string }) {
-  return (
-    <div className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-white border border-gray-100">
-      <span className={`w-9 h-9 rounded-lg flex items-center justify-center ${color}`}>
-        <i className={`${icon} text-sm`}></i>
-      </span>
-      <span className="text-lg font-bold text-gray-800 leading-none">{value}</span>
-      <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wide text-center">{label}</span>
-    </div>
   );
 }

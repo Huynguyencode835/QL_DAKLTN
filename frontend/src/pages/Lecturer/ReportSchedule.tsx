@@ -1,68 +1,39 @@
 import { useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
-import { useModal, usePageHeader, useToast } from '../../hooks';
+import { usePageHeader, useToast, useSearch } from '../../hooks';
 import { fetchWithAuth, createWithAuth, updatePatchWithAuth, deleteWithAuth } from '../../utils/ApiHelper';
 import { endpoints } from '../../config/Apis';
-import Card, { SectionCard } from '../../components/Ui/Card';
+import Card from '../../components/Ui/Card';
 import Button from '../../components/Ui/Button';
 import Badge from '../../components/Ui/Badge';
-import Input from '../../components/Ui/Input';
-import Modal from '../../components/Ui/Modal';
 import FilterBar from '../../components/FilterBar';
-import ItemCardGrid, { type ItemCard } from '../../components/Cards/ItemCardGrid';
+import ConfirmModal from '../../components/Ui/ConfirmModal';
+import ScheduleDetail from './ScheduleDetail';
+import ScheduleForm from './ScheduleForm';
 import type { RegistrationPeriod, Schedules } from '../../types';
-
-const emptyForm = {
-  title: '',
-  deadline: '',
-};
 
 function formatDate(iso: string | undefined | null): string {
   if (!iso) return '—';
   const d = new Date(iso);
-  return d.toLocaleString('vi-VN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function toDatetimeLocal(iso: string | undefined | null): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function ScheduleInfo({ icon, label, value }: { icon: string; label: string; value: ReactNode }) {
-  return (
-    <Card variant="soft" className="!p-3" bodyClassName="!p-0 flex items-center gap-3">
-      <span className="w-10 h-10 shrink-0 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-        <i className={`${icon} text-sm`}></i>
-      </span>
-      <div className="min-w-0">
-        <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">{label}</p>
-        <div className="text-sm font-semibold text-gray-800 truncate">{value ?? '—'}</div>
-      </div>
-    </Card>
-  );
+  return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    + ' ' + d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 }
 
 export default function ReportSchedule() {
   const toast = useToast();
-  const { openModal, closeModal } = useModal();
+  const { search, setSearch, searchParams } = useSearch();
+
   const [periods, setPeriods] = useState<RegistrationPeriod[]>([]);
   const [periodsLoading, setPeriodsLoading] = useState(true);
-  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('current');
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string>('current-project');
   const [schedules, setSchedules] = useState<Schedules[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [formModalOpen, setFormModalOpen] = useState(false);
+
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<Schedules | null>(null);
-  const [form, setForm] = useState({ ...emptyForm });
   const [submitting, setSubmitting] = useState(false);
+
+  const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
 
   usePageHeader({
     title: 'Lịch báo cáo định kỳ',
@@ -98,121 +69,57 @@ export default function ReportSchedule() {
     );
   };
 
-  const update = (field: string) => (e: any) => {
-    setForm(prev => ({ ...prev, [field]: e.target?.value ?? e }));
-  };
+  const filtered = schedules.filter((s) => {
+    const q = searchParams.search?.toLowerCase() || '';
+    if (!q) return true;
+    return (s.title || '').toLowerCase().includes(q) || String(s.sequence_number).includes(q);
+  });
 
-  const openCreateModal = () => {
-    setEditingSchedule(null);
-    setForm({ ...emptyForm });
-    setFormModalOpen(true);
-  };
+  const selectedSchedule = schedules.find((s) => s.id === selectedId) || null;
 
-  const openEditModal = (s: Schedules) => {
-    setEditingSchedule(s);
-    setForm({ title: s.title || '', deadline: toDatetimeLocal(s.deadline) });
-    setFormModalOpen(true);
-  };
-
-  const openDetailModal = (s: Schedules) => {
-    openModal({
-      title: s.title || `Lịch báo cáo lần ${s.sequence_number}`,
-      description: 'Thông tin chi tiết lịch báo cáo định kỳ',
-      icon: 'fa-regular fa-calendar-days',
-      size: 'md',
-      content: (
-        <div className="space-y-5">
-          <Card
-            variant="soft"
-            className="!bg-primary/5 !border-primary/10 !p-4"
-            bodyClassName="!p-0 flex items-center justify-between gap-4"
-          >
-            <div className="min-w-0">
-              <p className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">Tiêu đề</p>
-              <p className="text-sm font-semibold text-gray-800 truncate">{s.title || '—'}</p>
-            </div>
-            <Badge variant="primary" dot>Lần {s.sequence_number}</Badge>
-          </Card>
-
-          <SectionCard title="Thông tin lịch" icon="fa-solid fa-circle-info">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <ScheduleInfo icon="fa-solid fa-hashtag" label="Lần thứ" value={s.sequence_number} />
-              <ScheduleInfo icon="fa-regular fa-clock" label="Hạn nộp" value={formatDate(s.deadline)} />
-            </div>
-          </SectionCard>
-        </div>
-      ),
-      footer: (
-        <>
-          <Button variant="outline" size="sm" onClick={closeModal}>
-            Đóng
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            icon="fa-solid fa-pen"
-            onClick={() => {
-              closeModal();
-              openEditModal(s);
-            }}
-          >
-            Sửa
-          </Button>
-        </>
-      ),
-    });
-  };
-
-  const handleSubmit = async (e: any) => {
-    e.preventDefault();
-    if (!form.deadline) {
-      toast.error('Thiếu thông tin', 'Vui lòng chọn hạn nộp cho lịch báo cáo.');
-      return;
-    }
+  const handleCreate = async (body: Record<string, any>) => {
     setSubmitting(true);
-
-    const body = {
-      title: form.title,
-      deadline: new Date(form.deadline).toISOString(),
-    };
-    const onError = (type: string, msg: string) => {
-      toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
-    };
-
-    if (editingSchedule) {
-      await updatePatchWithAuth(
-        endpoints.scheduleItem(editingSchedule.id),
-        body,
-        () => {
-          loadSchedules();
-          setFormModalOpen(false);
-          toast.success('Đã lưu lịch', `Lịch báo cáo lần ${editingSchedule.sequence_number} đã được cập nhật.`);
-        },
-        onError,
-        setSubmitting
-      );
-    } else {
-      await createWithAuth(
-        endpoints.schedules(selectedPeriodId),
-        body,
-        () => {
-          loadSchedules();
-          setFormModalOpen(false);
-          toast.success('Tạo lịch thành công', 'Lịch báo cáo định kỳ đã được tạo.');
-        },
-        onError,
-        setSubmitting
-      );
-    }
-  };
-
-  const handleDelete = async (s: Schedules) => {
-    if (!window.confirm(`Xoá lịch báo cáo lần ${s.sequence_number}?`)) return;
-    await deleteWithAuth(
-      endpoints.scheduleItem(s.id),
+    await createWithAuth(
+      endpoints.schedules(selectedPeriodId),
+      body,
       () => {
         loadSchedules();
-        toast.success('Đã xoá lịch', `Lịch báo cáo lần ${s.sequence_number} đã được xoá.`);
+        setIsCreating(false);
+        toast.success('Tạo lịch thành công', 'Lịch báo cáo định kỳ đã được tạo.');
+      },
+      (type: string, msg: string) => {
+        toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
+      },
+      () => setSubmitting(false)
+    );
+  };
+
+  const handleEdit = async (body: Record<string, any>) => {
+    if (!editingSchedule) return;
+    setSubmitting(true);
+    await updatePatchWithAuth(
+      endpoints.scheduleItem(editingSchedule.id),
+      body,
+      () => {
+        loadSchedules();
+        setEditingSchedule(null);
+        toast.success('Đã lưu lịch', `Lịch báo cáo lần ${editingSchedule.sequence_number} đã được cập nhật.`);
+      },
+      (type: string, msg: string) => {
+        toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
+      },
+      () => setSubmitting(false)
+    );
+  };
+
+  const handleDelete = async (id: number) => {
+    const s = schedules.find((x) => x.id === id);
+    await deleteWithAuth(
+      endpoints.scheduleItem(id),
+      () => {
+        loadSchedules();
+        if (selectedId === id) setSelectedId(null);
+        toast.success('Đã xoá lịch', `Lịch báo cáo lần ${s?.sequence_number} đã được xoá.`);
       },
       (type: string, msg: string) => {
         toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
@@ -220,116 +127,125 @@ export default function ReportSchedule() {
     );
   };
 
-  const filtered = schedules.filter((s) => {
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return (s.title || '').toLowerCase().includes(q) || String(s.sequence_number).includes(q);
-  });
-
   return (
-    <main className="flex-1 overflow-y-auto p-4 md:p-6">
-      <div className="max-w-7xl mx-auto w-full space-y-6">
-        <FilterBar
-          searchValue={search}
-          onSearchChange={setSearch}
-          searchPlaceholder="Tìm kiếm lịch theo tiêu đề hoặc lần báo cáo..."
-          dropdowns={[
-            {
-              key: 'period',
-              value: selectedPeriodId,
-              onChange: setSelectedPeriodId,
-              placeholder: periodsLoading ? 'Đang tải...' : 'Chọn đợt đăng ký',
-              loading: periodsLoading,
-              widthClassName: 'w-full sm:w-64',
-              options: [
-                { value: 'current', label: 'Đợt hiện tại (đang mở)' },
-                ...periods.map((p) => ({ value: String(p.id), label: `${p.name} (${p.academic_year})` })),
-              ],
-            },
-          ]}
-          onRefresh={loadSchedules}
-          refreshLoading={loading}
-        />
-
-        <div className="flex items-center justify-end">
-          <Button variant="primary" icon="fa-solid fa-plus" onClick={openCreateModal}>
+    <div className="space-y-6">
+      <FilterBar
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Tìm kiếm theo tiêu đề, lần báo cáo..."
+        dropdowns={[
+          {
+            key: 'period',
+            value: selectedPeriodId,
+            onChange: setSelectedPeriodId,
+            placeholder: periodsLoading ? 'Đang tải...' : 'Chọn đợt đăng ký',
+            loading: periodsLoading,
+            widthClassName: 'w-full sm:w-64',
+            options: [
+              { value: 'current-project', label: 'Đợt đồ án hiện tại' },
+              { value: 'current-thesis', label: 'Đợt khóa luận hiện tại' },
+              ...periods.map((p) => ({ value: String(p.id), label: `${p.name} (${p.academic_year})` })),
+            ],
+          },
+        ]}
+        onRefresh={loadSchedules}
+        refreshLoading={loading}
+        actions={
+          <Button variant="primary" icon="fa-solid fa-plus" onClick={() => { setIsCreating(true); setSelectedId(null); setEditingSchedule(null); }}>
             Tạo lịch báo cáo
           </Button>
-        </div>
+        }
+      />
 
-        {!selectedPeriodId ? (
-          <Card variant="elevated" bodyClassName="!space-y-0">
-            <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-              <i className="fa-solid fa-calendar-week text-4xl mb-3"></i>
-              <p className="text-sm font-medium">Vui lòng chọn đợt đăng ký</p>
+      <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
+        {/* LEFT PANEL */}
+        <div className="lg:col-span-3">
+          <Card variant="elevated" icon="fa-solid fa-calendar-days" title={`Lịch báo cáo (${filtered.length})`}>
+            <div className="space-y-2 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
+              {filtered.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-4">Chưa có lịch báo cáo nào</p>
+              ) : (
+                filtered.map((s) => {
+                  const isSelected = selectedId === s.id && !isCreating && !editingSchedule;
+                  return (
+                    <div
+                      key={s.id}
+                      onClick={() => { setSelectedId(s.id); setIsCreating(false); setEditingSchedule(null); }}
+                      className={`p-3 rounded-xl cursor-pointer border transition-all duration-150 ${
+                        isSelected
+                          ? 'border-primary bg-primary/5 ring-1 ring-primary/20 shadow-sm'
+                          : 'border-gray-100 hover:bg-gray-50 hover:border-gray-200'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium text-gray-800 line-clamp-2 leading-snug">
+                            {s.title || `Lịch báo cáo lần ${s.sequence_number}`}
+                          </div>
+                          <div className="text-xs text-gray-400 mt-1.5 flex items-center gap-1">
+                            <i className="fa-regular fa-clock"></i>
+                            Hạn: {formatDate(s.deadline)}
+                          </div>
+                        </div>
+                        <Badge variant="primary" className="shrink-0 text-[10px]">Lần {s.sequence_number}</Badge>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </Card>
-        ) : (
-          <ItemCardGrid
-            items={filtered.map((s): ItemCard => ({
-              id: s.id,
-              title: s.title || `Lịch báo cáo lần ${s.sequence_number}`,
-              subtitle: (
-                <>
-                  <i className="fa-regular fa-clock mr-1"></i>
-                  Hạn nộp: {formatDate(s.deadline)}
-                </>
-              ),
-              icon: 'fa-file-lines',
-              iconClassName: 'bg-primary/10 text-primary',
-              cardClassName: 'bg-gray-50 hover:bg-blue-50',
-              badge: { label: `Lần ${s.sequence_number}`, variant: 'primary' },
-              onClick: () => openDetailModal(s),
-              actions: (
-                <>
-                  <Button variant="outline" size="sm" icon="fa-solid fa-pen" onClick={() => openEditModal(s)}>
-                    Sửa
-                  </Button>
-                  <Button variant="danger" size="sm" icon="fa-solid fa-trash" onClick={() => handleDelete(s)}>
-                    Xoá
-                  </Button>
-                </>
-              ),
-            }))}
-            loading={loading}
-            emptyText="Chưa có lịch báo cáo nào trong đợt này"
-            emptyIcon="fa-calendar-days"
-          />
-        )}
+        </div>
+
+        {/* RIGHT PANEL */}
+        <div className="lg:col-span-7">
+          {isCreating ? (
+            <ScheduleForm
+              mode="create"
+              onSubmit={handleCreate}
+              onCancel={() => setIsCreating(false)}
+              loading={submitting}
+            />
+          ) : editingSchedule ? (
+            <ScheduleForm
+              mode="edit"
+              initialValues={editingSchedule}
+              onSubmit={handleEdit}
+              onCancel={() => setEditingSchedule(null)}
+              loading={submitting}
+            />
+          ) : !selectedSchedule ? (
+            <div className="flex flex-col items-center justify-center py-20 text-gray-400 bg-white rounded-2xl border border-gray-100 shadow-sm">
+              <i className="fa-regular fa-hand-pointer text-5xl mb-4"></i>
+              <p className="text-sm font-medium">Chọn một lịch báo cáo từ danh sách bên trái</p>
+              <p className="text-xs text-gray-300 mt-1">hoặc bấm "Tạo lịch báo cáo" để tạo mới</p>
+            </div>
+          ) : (
+            <ScheduleDetail
+              schedule={selectedSchedule}
+              onEdit={(id) => {
+                const s = schedules.find((x) => x.id === id);
+                if (s) setEditingSchedule(s);
+              }}
+              onDelete={(id) => setConfirmDelete({ open: true, id })}
+            />
+          )}
+        </div>
       </div>
 
-      <Modal
-        open={formModalOpen}
-        onClose={() => setFormModalOpen(false)}
-        title={editingSchedule ? `Sửa lịch báo cáo lần ${editingSchedule.sequence_number}` : 'Tạo lịch báo cáo định kỳ'}
-        description="Sinh viên thuộc danh sách hướng dẫn của bạn sẽ thấy mốc nộp này."
-        icon="fa-solid fa-calendar-days"
-        size="md"
-      >
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <Input
-            label="Tiêu đề"
-            placeholder="VD: Báo cáo tiến độ tuần 5"
-            value={form.title}
-            onChange={update('title')}
-          />
-          <Input
-            label="Hạn nộp"
-            required
-            type="datetime-local"
-            value={form.deadline}
-            onChange={update('deadline')}
-          />
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
-            <Button variant="outline" size="sm" onClick={() => setFormModalOpen(false)}>
-              Hủy
-            </Button>
-            <Button type="submit" size="sm" icon="fa-solid fa-check" loading={submitting} disabled={submitting}>
-              {editingSchedule ? 'Lưu thay đổi' : 'Tạo lịch'}
-            </Button>
-          </div>
-        </form>
-      </Modal>
-    </main>
+      <ConfirmModal
+        open={confirmDelete.open}
+        title="Xoá lịch báo cáo"
+        description={`Bạn có chắc muốn xoá lịch báo cáo này? Hành động này không thể hoàn tác.`}
+        icon="fa-solid fa-trash"
+        confirmLabel="Xoá"
+        confirmVariant="danger"
+        onConfirm={() => {
+          if (confirmDelete.id) handleDelete(confirmDelete.id);
+          setConfirmDelete({ open: false, id: null });
+        }}
+        onCancel={() => setConfirmDelete({ open: false, id: null })}
+      />
+    </div>
   );
 }

@@ -1,16 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { endpoints } from "../config/Apis";
-import axios from "axios";
+import api from "../config/Apis";
 import { useUser, useToast } from "../hooks";
-import { fetchWithAuth } from "../utils/ApiHelper";
 
 export default function LoginForm() {
   const navigate = useNavigate();
   const { setUser } = useUser();
   const toast = useToast();
   const [showPassword, setShowPassword] = useState(false);
-  const [form, setForm] = useState({ username: "", password: "", captcha: "" });
+  const [form, setForm] = useState({ username: "", password: "" });
   const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -22,36 +21,26 @@ export default function LoginForm() {
     e.preventDefault();
     setLoading(true);
     try {
-      const body = {
+      const res = await api.post(endpoints.login, {
         username: form.username,
         password: form.password,
-        client_id: import.meta.env.VITE_CLIENT_ID_APP,
-        client_secret: import.meta.env.VITE_CLIENT_SECRET_APP,
-        grant_type: "password",
-      };
-
-      const authUrl = import.meta.env.VITE_AUTH_URL || "http://127.0.0.1:8000";
-      const res = await axios.post(
-        `${authUrl}/o/token/`,
-        body,
-        {
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      });
 
       if (res.status === 200) {
         localStorage.setItem("access_token", res.data.access_token);
-        localStorage.setItem("refresh_token", res.data.refresh_token);
 
-        await fetchWithAuth(
-          endpoints.profile,
-          (data: any) => {
-            setUser(data);
-            toast.success('Đăng nhập thành công', `Chào mừng ${data.first_name || data.username || ''} quay lại!`);
-            navigate("/");
-          },
-          (onError: any) => toast.error('Lỗi', onError)
-        );
+        if (remember) {
+          localStorage.setItem("isRefreshing", "true");
+        } else {
+          localStorage.removeItem("isRefreshing");
+        }
+
+        const profileRes = await api.get(endpoints.profile);
+        if (profileRes.status === 200) {
+          setUser(profileRes.data);
+          toast.success('Đăng nhập thành công', `Chào mừng ${profileRes.data.first_name || profileRes.data.username || ''} quay lại!`);
+          navigate("/");
+        }
       }
     } catch (err: any) {
       const message =
@@ -138,8 +127,6 @@ export default function LoginForm() {
                 </button>
               </div>
             </div>
-
-            
 
             <div className="flex items-center justify-between pt-1">
               <label className="flex items-center gap-2 cursor-pointer group">

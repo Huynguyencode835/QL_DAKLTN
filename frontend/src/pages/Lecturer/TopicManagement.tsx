@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { useModal, usePageHeader, useToast, useSearch } from '../../hooks';
+import { useModal, usePageHeader, useToast, useSearch, usePagination } from '../../hooks';
 import { fetchWithAuth, createWithAuth, updatePatchWithAuth, deleteWithAuth } from '../../utils/ApiHelper';
 import { endpoints } from '../../config/Apis';
 import Card from '../../components/Ui/Card';
@@ -9,6 +9,7 @@ import Input from '../../components/Ui/Input';
 import Textarea from '../../components/Ui/Textarea';
 import Select from '../../components/Ui/Select';
 import GenericTable, { TableColumn } from '../../components/GenericTable';
+import Pagination from '../../components/Ui/Pagination';
 import { DIFFICULTY_CONFIG, DIFFICULTY_OPTIONS } from '../../types';
 
 const emptyForm = {
@@ -41,14 +42,16 @@ export default function TopicManagement() {
 
 
   const { search, setSearch, searchParams } = useSearch();
+  const { resetPage, paginationParams, handlePaginatedResponse, paginationProps } = usePagination({ pageSize: 5 });
 
 
-  useEffect(() => { loadTopics(); }, [searchParams, difficultyFilter]);
+  useEffect(() => { resetPage(); }, [searchParams, difficultyFilter]);
+  useEffect(() => { loadTopics(); }, [searchParams, difficultyFilter, paginationParams.page]);
 
   const loadTopics = async () => {
-    await fetchWithAuth(endpoints.myTopic, (data: any) => {
-          setTopics(Array.isArray(data) ? data : data?.results ?? []);
-        }, () => { }, { ...searchParams, difficulty_level: difficultyFilter || undefined }, setLoading);
+    await fetchWithAuth(endpoints.myTopic, (data: any, paginatedData?: { count: number }) => {
+          setTopics(handlePaginatedResponse(Array.isArray(data) ? data : data?.results ?? [], paginatedData));
+        }, () => { }, { ...searchParams, ...paginationParams, difficulty_level: difficultyFilter || undefined }, setLoading);
     };
 
   const loadTopicDetail = async (id: number, onSuccess: any) => {
@@ -249,12 +252,15 @@ export default function TopicManagement() {
               <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
             </div>
           ) : (
-            <GenericTable
-              rows={topics}
-              columns={columns}
-              rowKey={(topic) => topic.id}
-              emptyText={search || difficultyFilter ? 'Không tìm thấy đề tài phù hợp' : 'Chưa có đề tài nào'}
-            />
+            <>
+              <GenericTable
+                rows={topics}
+                columns={columns}
+                rowKey={(topic) => topic.id}
+                emptyText={search || difficultyFilter ? 'Không tìm thấy đề tài phù hợp' : 'Chưa có đề tài nào'}
+              />
+              <Pagination {...paginationProps} />
+            </>
           )}
       </div>
 

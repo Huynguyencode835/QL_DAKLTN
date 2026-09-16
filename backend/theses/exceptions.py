@@ -27,6 +27,14 @@ CONSTRAINT_MESSAGES = {
     "report_submission_days_positive":
         "Số ngày nhận báo cáo phải lớn hơn 0.",
 
+    # --- ReviewerAssignmentSession ---
+    "reviewer_session_defense_date_required":
+        "Đợt phản biện phải có ngày bảo vệ.",
+
+    # --- RegistrationLecturer ---
+    "reviewer_session_required_only_for_reviewer_role":
+        "Session phản biện chỉ được gán cho vai trò phản biện.",
+
     # --- Thêm constraint của model khác tại đây khi phát sinh ---
     # "unique_together_xxx": "Message tiếng Việt tương ứng.",
 }
@@ -190,13 +198,4 @@ def custom_exception_handler(exc, context):
         exc,
         exc_info=True,
     )
-
-    # Trả None để Django xử lý theo cơ chế mặc định (DEBUG=True sẽ hiện
-    # traceback đầy đủ khi dev; DEBUG=False sẽ trả trang 500 chuẩn).
-    # Nếu muốn LUÔN trả JSON gọn gàng kể cả lỗi lạ, uncomment đoạn dưới:
-    #
-    # return Response(
-    #     {"detail": DEFAULT_UNKNOWN_ERROR_MESSAGE},
-    #     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-    # )
     return None

@@ -29,7 +29,7 @@ SECRET_KEY = 'django-insecure-)+5j8!i*rc29b4vqm08*4*!ayf0pu$(c1&4q^r(r$lmx2)t3co
 DEBUG = True
 
 ALLOWED_HOSTS = [
-    'https://ql-dakltn.onrender.com',
+    'ql-dakltn.onrender.com',
     'localhost',
     '127.0.0.1',
 ]

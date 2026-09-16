@@ -26,7 +26,6 @@ import CommitteeManagement from "../pages/Staff/CommitteeManagement";
 import ManageReviewerSessions from "../pages/Staff/ManageReviewerSessions";
 import ReviewerSessionDetail from "../pages/Lecturer/ReviewerSessionDetail";
 import MyReviewerSessions from "../pages/Lecturer/MyReviewerSessions";
-import Notifications from "../pages/Notifications";
 
 const ALL_ROLES = ['student', 'lecturer', 'staff', 'admin'] as const;
 
@@ -52,7 +51,6 @@ export const router = createBrowserRouter([
                 children: [
                     { index: true, element: <Home />, handle: { roles: [...ALL_ROLES] } },
                     { path: "profile", element: <Profile />, handle: { roles: [...ALL_ROLES] } },
-                    { path: "notifications", element: <Notifications />, handle: { roles: [...ALL_ROLES] } },
                     { path: "period", element: <PeriodStatusPage />, handle: { roles: ['student', 'lecturer', 'staff', 'admin'] } },
                     { path: "grades-and-results", element: <GradesAndResults />, handle: { roles: ['student', 'lecturer', 'staff', 'admin'] } },
                     { path: "reports-management", element: <ReportsManagement />, handle: { roles: ['lecturer', 'staff', 'admin'] } },

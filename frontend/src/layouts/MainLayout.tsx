@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useUser, usePageHeaderValue, useToast } from '../hooks';
 import SidebarItem from '../components/Layout/SidebarItem';
-import Button from '../components/Ui/Button';
 
 const menuConfig: Record<string, any> = {
   student: [
@@ -18,7 +17,6 @@ const menuConfig: Record<string, any> = {
     },
     { group: 'Kết quả', items: [{ label: 'Điểm & Kết quả', icon: 'fa-award', path: '/grades-and-results' }] },
     { group: 'Cá nhân', items: [
-      { label: 'Thông báo', icon: 'fa-bell', path: '/notifications' },
       { label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' },
     ] },
   ],
@@ -44,7 +42,6 @@ const menuConfig: Record<string, any> = {
     },
     { group: 'Kết quả', items: [{ label: 'Điểm & Kết quả', icon: 'fa-award', path: '/grades-and-results' }] },
     { group: 'Cá nhân', items: [
-      { label: 'Thông báo', icon: 'fa-bell', path: '/notifications' },
       { label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' },
     ] },
   ],
@@ -65,7 +62,6 @@ const menuConfig: Record<string, any> = {
       { label: 'Điều chỉnh điểm', icon: 'fa-sliders', path: '/manage-grades' },
     ] },
     { group: 'Cá nhân', items: [
-      { label: 'Thông báo', icon: 'fa-bell', path: '/notifications' },
       { label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' },
     ] },
   ],
@@ -83,7 +79,6 @@ const menuConfig: Record<string, any> = {
     },
     { group: 'Kết quả', items: [{ label: 'Điều chỉnh điểm', icon: 'fa-sliders', path: '/manage-grades' }] },
     { group: 'Cá nhân', items: [
-      { label: 'Thông báo', icon: 'fa-bell', path: '/notifications' },
       { label: 'Tài khoản', icon: 'fa-circle-user', path: '/profile' },
     ] },
   ],
@@ -224,11 +219,6 @@ export default function MainLayout() {
             )}
           </div>
           <div className="flex items-center gap-5">
-            <Button variant="ghost" size="icon" className="relative text-gray-400" icon="fa-regular fa-bell" onClick={() => navigate('/notifications')}>
-              <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-danger text-white text-[9px] font-bold rounded-full flex items-center justify-center ring-2 ring-white shadow-sm">
-                3
-              </span>
-            </Button>
             <div
               onClick={() => navigate(isLoggedIn ? '/profile' : '/login')}
               className="flex items-center gap-3 border-l border-gray-200 pl-5 cursor-pointer group"

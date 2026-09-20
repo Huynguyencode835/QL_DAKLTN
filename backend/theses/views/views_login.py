@@ -10,7 +10,9 @@ from rest_framework.permissions import AllowAny
 import logging
 logger = logging.getLogger(__name__)
 
-internal_client = Client()
+
+def get_internal_client(request):
+    return Client(SERVER_NAME=request.get_host().split(":")[0])
 
 
 @ensure_csrf_cookie
@@ -30,12 +32,13 @@ class CookieLoginView(APIView):
             "client_secret": settings.OAUTH_CLIENT_SECRET,
         }
 
-        token_response = internal_client.post("/o/token/", data=data)
+        client = get_internal_client(request)
+        token_response = client.post("/o/token/", data=data)
 
         if token_response.status_code != 200:
             logger.error("OAuth2 token error: %s %s", token_response.status_code, token_response.content)
             return Response(
-                {"detail": f"Sai tài khoản hoặc mật khẩu: {token_response.content.decode()}"},
+                {"detail": f"Sai tài khoản hoặc mật khẩu"},
                 status=400,
             )
 
@@ -73,7 +76,8 @@ class CookieRefreshView(APIView):
             "client_id": settings.OAUTH_CLIENT_ID,
             "client_secret": settings.OAUTH_CLIENT_SECRET,
         }
-        token_response = internal_client.post("/o/token/", data=data)
+        client = get_internal_client(request)
+        token_response = client.post("/o/token/", data=data)
 
         if token_response.status_code != 200:
             return Response({"detail": "Refresh token không hợp lệ hoặc đã hết hạn"}, status=401)
@@ -102,7 +106,8 @@ class LogoutView(APIView):
     def post(self, request):
         refresh_token = request.COOKIES.get("refresh_token")
         if refresh_token:
-            internal_client.post(
+            client = get_internal_client(request)
+            client.post(
                 "/o/revoke_token/",
                 data={
                     "token": refresh_token,

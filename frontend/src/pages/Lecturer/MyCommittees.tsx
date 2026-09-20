@@ -125,8 +125,8 @@ export default function MyCommittees() {
         key: 'role_in_committee',
         label: 'Vai trò',
         render: (row) => {
-          const cfg = COMMITTEE_ROLE_CONFIG[row.role_in_committee];
-          return <Badge variant={cfg?.variant || 'neutral'}>{cfg?.label || row.role_in_committee}</Badge>;
+          const cfg = COMMITTEE_ROLE_CONFIG[(row as any).role_in_committee];
+          return <Badge variant={cfg?.variant || 'neutral'}>{cfg?.label || (row as any).role_in_committee}</Badge>;
         },
       },
       {

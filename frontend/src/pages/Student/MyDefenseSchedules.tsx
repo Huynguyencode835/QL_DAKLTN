@@ -121,13 +121,19 @@ export default function MyDefenseSchedules() {
     : sessions.find((s) => s.id === selectedId) || null;
 
   const memberColumns: TableColumn<any>[] = [
-    { key: 'stt', label: 'STT', align: 'center', render: (_, idx) => <span className="text-gray-500">{(idx ?? 0) + 1}</span> },
+    { key: 'stt', label: 'STT', align: 'center', render: (row) => {
+      const idx = detail?.members_detail?.findIndex((m: any) => m.id === row.id) ?? -1;
+      return <span className="text-gray-500">{idx >= 0 ? idx + 1 : '—'}</span>;
+    }},
     { key: 'lecturer_name', label: 'Họ tên', render: (row) => <span className="font-medium text-gray-800">{row.lecturer_name}</span> },
     { key: 'role', label: 'Vai trò', render: (row) => { const cfg = COMMITTEE_ROLE_CONFIG[row.role as CommitteeMemberRole]; return <Badge variant={cfg?.variant || 'neutral'}>{cfg?.label || row.role}</Badge>; } },
   ];
 
   const regColumns: TableColumn<any>[] = [
-    { key: 'stt', label: 'STT', align: 'center', render: (_, idx) => <span className="text-gray-500">{(idx ?? 0) + 1}</span> },
+    { key: 'stt', label: 'STT', align: 'center', render: (row) => {
+      const idx = detail?.registrations_detail?.findIndex((r: any) => r.id === row.id) ?? -1;
+      return <span className="text-gray-500">{idx >= 0 ? idx + 1 : '—'}</span>;
+    }},
     { key: 'project_title', label: 'Đề tài', render: (row) => <span className="font-medium text-gray-800 line-clamp-1">{row.project_title}</span> },
     { key: 'student_name', label: 'Sinh viên', render: (row) => <div><div className="text-sm text-gray-800">{row.student_name}</div><div className="text-xs text-gray-400">{row.student_id}</div></div> },
     { key: 'approval_status', label: 'Trạng thái', render: (row) => { const cfg = REVIEWER_APPROVAL_STATUS_CONFIG[row.approval_status as ReviewerApprovalStatus]; return cfg ? <Badge variant={cfg.variant} className="text-[10px]">{cfg.label}</Badge> : <span className="text-gray-400">—</span>; } },
@@ -261,9 +267,12 @@ function CommitteeDetailContent({ detail }: { detail: any }) {
             <GenericTable
               rows={detail.members_detail || []}
               columns={[
-                { key: 'stt', label: 'STT', align: 'center', render: (_, idx) => <span className="text-gray-500">{(idx ?? 0) + 1}</span> },
-                { key: 'lecturer_name', label: 'Họ tên', render: (row) => <span className="font-medium text-gray-800">{row.lecturer_name}</span> },
-                { key: 'role', label: 'Vai trò', render: (row) => { const cfg = COMMITTEE_ROLE_CONFIG[row.role as CommitteeMemberRole]; return <Badge variant={cfg?.variant || 'neutral'}>{cfg?.label || row.role}</Badge>; } },
+                { key: 'stt', label: 'STT', align: 'center', render: (row: any) => {
+                  const idx = detail.members_detail?.findIndex((m: any) => m.id === row.id) ?? -1;
+                  return <span className="text-gray-500">{idx >= 0 ? idx + 1 : '—'}</span>;
+                }},
+                { key: 'lecturer_name', label: 'Họ tên', render: (row: any) => <span className="font-medium text-gray-800">{row.lecturer_name}</span> },
+                { key: 'role', label: 'Vai trò', render: (row: any) => { const cfg = COMMITTEE_ROLE_CONFIG[row.role as CommitteeMemberRole]; return <Badge variant={cfg?.variant || 'neutral'}>{cfg?.label || row.role}</Badge>; } },
               ]}
               rowKey={(row) => row.id}
               emptyText="Chưa có thành viên"
@@ -322,10 +331,13 @@ function SessionDetailContent({ detail }: { detail: any }) {
         <GenericTable
           rows={detail.assignments || []}
           columns={[
-            { key: 'stt', label: 'STT', align: 'center', render: (_, idx) => <span className="text-gray-500">{(idx ?? 0) + 1}</span> },
-            { key: 'project_title', label: 'Đề tài', render: (row) => <span className="font-medium text-gray-800 line-clamp-1">{row.project_title}</span> },
-            { key: 'student_name', label: 'Sinh viên', render: (row) => <div><div className="text-sm text-gray-800">{row.student_name}</div><div className="text-xs text-gray-400">{row.student_id}</div></div> },
-            { key: 'approval_status', label: 'Trạng thái', render: (row) => { const cfg = REVIEWER_APPROVAL_STATUS_CONFIG[row.approval_status as ReviewerApprovalStatus]; return cfg ? <Badge variant={cfg.variant} className="text-[10px]">{cfg.label}</Badge> : <span className="text-gray-400">—</span>; } },
+            { key: 'stt', label: 'STT', align: 'center', render: (row: any) => {
+              const idx = detail.assignments?.findIndex((a: any) => a.registration_id === row.registration_id) ?? -1;
+              return <span className="text-gray-500">{idx >= 0 ? idx + 1 : '—'}</span>;
+            }},
+            { key: 'project_title', label: 'Đề tài', render: (row: any) => <span className="font-medium text-gray-800 line-clamp-1">{row.project_title}</span> },
+            { key: 'student_name', label: 'Sinh viên', render: (row: any) => <div><div className="text-sm text-gray-800">{row.student_name}</div><div className="text-xs text-gray-400">{row.student_id}</div></div> },
+            { key: 'approval_status', label: 'Trạng thái', render: (row: any) => { const cfg = REVIEWER_APPROVAL_STATUS_CONFIG[row.approval_status as ReviewerApprovalStatus]; return cfg ? <Badge variant={cfg.variant} className="text-[10px]">{cfg.label}</Badge> : <span className="text-gray-400">—</span>; } },
           ]}
           rowKey={(row) => row.registration_id}
           emptyText="Không tìm thấy đề tài của bạn trong đợt này"

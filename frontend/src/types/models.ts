@@ -97,6 +97,7 @@ export interface Registration {
     specializations?: string[];
   }[];
   status_display?: string;
+  is_thesis?: boolean;
 }
 
 export interface GradeWeightConfig {
@@ -123,6 +124,7 @@ export interface RegistrationPeriod {
   report_submission_days?: number;
   execution_duration_weeks?: number;
   grade_weight_configs?: GradeWeightConfig[];
+  parent_period?: number;
 }
 
 export type PeriodStatus =

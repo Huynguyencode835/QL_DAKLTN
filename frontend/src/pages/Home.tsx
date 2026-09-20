@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useUser, usePageHeader, usePeriod } from '../hooks';
 import { STATUS_CONFIG_PERIOD, SCHEDULED_CONFIG, ROLE_ACTION_CONFIG } from '../types';
+import type { Period } from '../types';
 import PeriodCardRegistration from '../components/Period/PeriodCardRegistration';
 import PeriodCardInProgress from '../components/Period/PeriodCardInProgress';
 import PeriodCardReportSubmission from '../components/Period/PeriodCardReportSubmission';
@@ -190,7 +191,7 @@ function PeriodNullCard() {
   );
 }
 
-function PeriodActiveBanner({ period }: { period: NonNullable<ReturnType<typeof usePeriod>['period']> }) {
+function PeriodActiveBanner({ period }: { period: Period }) {
   const navigate = useNavigate();
   const config = period.status !== 'scheduled' ? STATUS_CONFIG_PERIOD[period.status] : null;
   const schedConfig = SCHEDULED_CONFIG;
@@ -332,31 +333,31 @@ export default function Home() {
           <PeriodActiveBanner period={period} />
           <div className="lg:col-span-4 grid grid-cols-1 gap-4">
             {period.status === 'student_registration' && (
-              <PeriodCardRegistration action={(() => {
+              <PeriodCardRegistration period={period} action={(() => {
                 const a = ROLE_ACTION_CONFIG[role]?.student_registration;
                 return a ? { label: a.label, icon: a.icon, onClick: () => navigate(a.to) } : undefined;
               })()} />
             )}
             {period.status === 'in_progress' && (
-              <PeriodCardInProgress action={(() => {
+              <PeriodCardInProgress period={period} action={(() => {
                 const a = ROLE_ACTION_CONFIG[role]?.in_progress;
                 return a ? { label: a.label, icon: a.icon, onClick: () => navigate(a.to) } : undefined;
               })()} />
             )}
             {period.status === 'report_submission' && (
-              <PeriodCardReportSubmission action={(() => {
+              <PeriodCardReportSubmission period={period} action={(() => {
                 const a = ROLE_ACTION_CONFIG[role]?.report_submission;
                 return a ? { label: a.label, icon: a.icon, onClick: () => navigate(a.to) } : undefined;
               })()} />
             )}
             {period.status === 'closed' && (
-              <PeriodCardClosed action={(() => {
+              <PeriodCardClosed period={period} action={(() => {
                 const a = ROLE_ACTION_CONFIG[role]?.closed;
                 return a ? { label: a.label, icon: a.icon, onClick: () => navigate(a.to) } : undefined;
               })()} />
             )}
             {period.status === 'scheduled' && (
-              <PeriodCardRegistration action={null} />
+              <PeriodCardRegistration period={period} action={null} />
             )}
           </div>
         </div>

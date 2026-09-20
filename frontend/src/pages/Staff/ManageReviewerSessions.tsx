@@ -551,11 +551,11 @@ export default function ManageReviewerSessions() {
 
       <ConfirmModal
         open={confirmDelete.open}
-        onClose={() => setConfirmDelete({ open: false, id: null })}
+        onCancel={() => setConfirmDelete({ open: false, id: null })}
         onConfirm={handleDelete}
         title="Xoá đợt phản biện"
         description="Bạn có chắc chắn muốn xoá đợt phản biện này? Tất cả phân công liên quan sẽ bị xoá."
-        confirmText="Xoá"
+        confirmLabel="Xoá"
         confirmVariant="danger"
       />
     </div>

@@ -278,9 +278,9 @@ export default function CommitteeDetail() {
   }
 
   const statusCfg = COMMITTEE_STATUS_CONFIG[committee.status];
-  const roleCfg = COMMITTEE_ROLE_CONFIG[committee.role_in_committee];
-  const members = committee.members || [];
-  const registrations = committee.registrations || [];
+  const roleCfg = COMMITTEE_ROLE_CONFIG[(committee as any).role_in_committee];
+  const members = (committee as any).members || [];
+  const registrations = (committee as any).registrations || [];
   const selectedReg = registrations.find((r) => r.id === selectedRegId);
 
   const memberColumns: TableColumn<CommitteeMemberInfo>[] = [
@@ -313,7 +313,11 @@ export default function CommitteeDetail() {
       key: 'stt',
       label: 'STT',
       align: 'center',
-      render: (_, idx) => <span className="text-gray-500">{(idx ?? 0) + 1}</span>,
+      render: (row) => {
+        const membersData = currentGradeData?.committee_members || [];
+        const idx = membersData.findIndex((m) => m.id === row.id);
+        return <span className="text-gray-500">{(idx >= 0 ? idx : 0) + 1}</span>;
+      },
     },
     {
       key: 'member_name',

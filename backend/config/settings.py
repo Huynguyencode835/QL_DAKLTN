@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 from dotenv import load_dotenv
 import os
+import ssl
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -82,7 +84,12 @@ CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
         "LOCATION": os.getenv('REDIS_URL'),
-        "OPTIONS": {"CLIENT_CLASS": "django_redis.client.DefaultClient"},
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "CONNECTION_POOL_KWARGS": {
+                "ssl_cert_reqs": None,
+            },
+        },
         "KEY_PREFIX": "cache",
         "TIMEOUT": 300,
     }
@@ -91,6 +98,7 @@ CACHES = {
 # ============================================
 # CELERY (dùng ETA task, KHÔNG cần CELERY_BEAT_SCHEDULE)
 # ============================================
+
 CELERY_BROKER_URL = os.getenv('REDIS_URL')
 CELERY_RESULT_BACKEND = None
 CELERY_TASK_IGNORE_RESULT = True
@@ -100,9 +108,16 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = 'UTC'
 
+CELERY_BROKER_USE_SSL = {
+    'ssl_cert_reqs': ssl.CERT_NONE,
+}
+
 CELERY_BROKER_TRANSPORT_OPTIONS = {
     "global_keyprefix": "celery:",
+    "visibility_timeout": 43200,
 }
+
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
 # OAUTH2_PROVIDER = { 'OAUTH2_BACKEND_CLASS': 'oauth2_provider.oauth2_backends.JSONOAuthLibCore'}
 

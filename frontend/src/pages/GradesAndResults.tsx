@@ -42,6 +42,7 @@ function LecturerGradeView({ readonly = false }: { readonly?: boolean }) {
   const [editingField, setEditingField] = useState<'process' | 'final' | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [originalGrades, setOriginalGrades] = useState<Record<number, { process: number | null; final: number | null }>>({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     loadPeriods();
@@ -153,15 +154,16 @@ function LecturerGradeView({ readonly = false }: { readonly?: boolean }) {
       toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
     };
 
+    setSaving(true);
     if (row.process_grade_id) {
-      await updatePatchWithAuth(endpoints.gradeDetail(row.process_grade_id), body, onSuccess, onError);
+      await updatePatchWithAuth(endpoints.gradeDetail(row.process_grade_id), body, onSuccess, onError, () => setSaving(false));
     } else {
       await createWithAuth(endpoints.grades, body, (data: any) => {
         setGrades((prev) =>
           prev.map((r) => (r.id === rowId ? { ...r, process_grade_id: data.id } : r))
         );
         onSuccess();
-      }, onError);
+      }, onError, () => setSaving(false));
     }
   };
 
@@ -205,15 +207,16 @@ function LecturerGradeView({ readonly = false }: { readonly?: boolean }) {
       toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
     };
 
+    setSaving(true);
     if (row?.final_grade_id) {
-      await updatePatchWithAuth(endpoints.gradeDetail(row.final_grade_id), body, onSuccess, onError);
+      await updatePatchWithAuth(endpoints.gradeDetail(row.final_grade_id), body, onSuccess, onError, () => setSaving(false));
     } else {
       await createWithAuth(endpoints.grades, body, (data: any) => {
         setGrades((prev) =>
           prev.map((r) => (r.id === rowId ? { ...r, final_grade_id: data.id } : r))
         );
         onSuccess();
-      }, onError);
+      }, onError, () => setSaving(false));
     }
   };
 
@@ -329,7 +332,7 @@ function LecturerGradeView({ readonly = false }: { readonly?: boolean }) {
         if (editingRowId === row.id) {
           return (
             <div className="flex justify-end gap-1">
-              <Button variant="primary" size="sm" icon="fa-solid fa-check" onClick={() => handleSave(row.id)}>
+              <Button variant="primary" size="sm" icon="fa-solid fa-check" onClick={() => handleSave(row.id)} loading={saving} disabled={saving}>
                 Lưu
               </Button>
               <Button variant="outline" size="sm" icon="fa-solid fa-xmark" onClick={cancelEditing}>
@@ -350,7 +353,7 @@ function LecturerGradeView({ readonly = false }: { readonly?: boolean }) {
         );
       },
     }] : []),
-  ], [editingRowId, editingField, editValue, grades, readonly]);
+  ], [editingRowId, editingField, editValue, grades, readonly, saving]);
 
   return (
     <div className="space-y-6">

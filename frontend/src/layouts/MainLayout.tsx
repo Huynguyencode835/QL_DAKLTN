@@ -106,6 +106,7 @@ export default function MainLayout() {
   const { user, logout, loading } = useUser();
   const { header } = usePageHeaderValue();
   const toast = useToast();
+  const [loggingOut, setLoggingOut] = useState(false);
 
   if (loading) {
     return (
@@ -187,9 +188,10 @@ export default function MainLayout() {
                 </div>
                 {isLoggedIn && (
                   <button
-                    onClick={(e) => { e.stopPropagation(); logout(); toast.info('Đã đăng xuất'); navigate('/login'); }}
+                    onClick={async (e) => { e.stopPropagation(); setLoggingOut(true); try { await logout(); toast.info('Đã đăng xuất'); navigate('/login'); } finally { setLoggingOut(false); } }}
                     className="w-7 h-7 flex items-center justify-center rounded-lg text-white/40 hover:text-red-400 hover:bg-white/10 transition-all shrink-0"
                     title="Đăng xuất"
+                    disabled={loggingOut}
                   >
                     <i className="fa-solid fa-right-from-bracket text-xs" />
                   </button>

@@ -76,6 +76,8 @@ export default function CommitteeManagement() {
   const [availableRegistrations, setAvailableRegistrations] = useState<any[]>([]);
   const [registrationsLoading, setRegistrationsLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [detailCommittee, setDetailCommittee] = useState<CommitteeDetail | null>(null);
   const regPagination = usePagination({ pageSize: 8 });
 
@@ -216,6 +218,7 @@ export default function CommitteeManagement() {
       members: validMembers.map((m) => ({ lecturer: Number(m.lecturer), role: m.role })),
       registrations: selectedRegistrationIds,
     };
+    setSubmitting(true);
     await createWithAuth(
       endpoints.committees(selectedPeriodId),
       body,
@@ -227,11 +230,13 @@ export default function CommitteeManagement() {
         toast.success('Tạo hội đồng thành công', `Hội đồng "${data.name}" đã được tạo.`);
       },
       (_type: string, msg: string) => toast.error('Lỗi', msg || 'Không thể tạo hội đồng.'),
+      () => setSubmitting(false),
     );
   };
 
   const handleDelete = async (id: number) => {
     const c = committees.find((x) => x.id === id);
+    setDeleting(true);
     await deleteWithAuth(
       endpoints.committeeDetail(selectedPeriodId, id),
       () => {
@@ -240,6 +245,7 @@ export default function CommitteeManagement() {
         toast.success('Đã xoá hội đồng', `Hội đồng "${c?.name}" đã bị xoá.`);
       },
       (_type: string, msg: string) => toast.error('Lỗi', msg || 'Không thể xoá hội đồng.'),
+      () => setDeleting(false),
     );
   };
 
@@ -350,7 +356,7 @@ export default function CommitteeManagement() {
                 </div>
                 <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
                   <Button variant="outline" size="sm" onClick={resetForm}>Hủy</Button>
-                  <Button variant="primary" size="sm" icon="fa-solid fa-check" onClick={handleCreate}>Tạo hội đồng</Button>
+                  <Button variant="primary" size="sm" icon="fa-solid fa-check" onClick={handleCreate} loading={submitting} disabled={submitting}>Tạo hội đồng</Button>
                 </div>
               </div>
             </SectionCard>
@@ -365,7 +371,7 @@ export default function CommitteeManagement() {
                   { label: `${detailCommittee?.registrations_detail?.length || 0} đề tài`, variant: 'neutral' },
                   { label: `${detailCommittee?.members_detail?.length || 0} thành viên`, variant: 'neutral' },
                 ]}
-                actions={<Button variant="danger" size="sm" icon="fa-solid fa-trash" onClick={() => detailCommittee && handleDelete(detailCommittee.id)}>Xoá hội đồng</Button>}
+                actions={<Button variant="danger" size="sm" icon="fa-solid fa-trash" onClick={() => detailCommittee && handleDelete(detailCommittee.id)} loading={deleting} disabled={deleting}>Xoá hội đồng</Button>}
               />
               <SectionCard title="Thông tin hội đồng" icon="fa-solid fa-circle-info">
                 <InfoTileGrid items={[

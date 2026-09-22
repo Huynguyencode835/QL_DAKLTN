@@ -37,6 +37,7 @@ export default function TopicManagement() {
   const [difficultyFilter, setDifficultyFilter] = useState('');
   const [form, setForm] = useState({ ...emptyForm });
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formModalOpen, setFormModalOpen] = useState(false);
 
@@ -89,6 +90,7 @@ export default function TopicManagement() {
   };
 
   const handleDelete = async (id: number) => {
+    setDeleting(true);
     await deleteWithAuth(
       endpoints.TopicDetail(id),
       () => {
@@ -98,6 +100,7 @@ export default function TopicManagement() {
       (type: string, msg: string) => {
         toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
       },
+      () => setDeleting(false),
     );
   };
 
@@ -131,10 +134,10 @@ export default function TopicManagement() {
       ),
       footer: (
         <div className="flex items-center gap-2">
-          <Button variant="danger" icon="fa-solid fa-trash-can" onClick={() => { handleDelete(topic.id); closeModal(); }}>
+          <Button variant="danger" icon="fa-solid fa-trash-can" onClick={() => { handleDelete(topic.id); closeModal(); }} loading={deleting} disabled={deleting}>
             Xóa
           </Button>
-          <Button variant="outline" onClick={closeModal}>Hủy</Button>
+          <Button variant="outline" onClick={closeModal} disabled={deleting}>Hủy</Button>
         </div>
       ),
     });

@@ -34,6 +34,7 @@ export default function ReportSchedule() {
   const [submitting, setSubmitting] = useState(false);
 
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
+  const [confirmDeleteLoading, setConfirmDeleteLoading] = useState(false);
 
   usePageHeader({
     title: 'Lịch báo cáo định kỳ',
@@ -114,6 +115,7 @@ export default function ReportSchedule() {
 
   const handleDelete = async (id: number) => {
     const s = schedules.find((x) => x.id === id);
+    setConfirmDeleteLoading(true);
     await deleteWithAuth(
       endpoints.scheduleItem(id),
       () => {
@@ -123,7 +125,8 @@ export default function ReportSchedule() {
       },
       (type: string, msg: string) => {
         toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
-      }
+      },
+      () => setConfirmDeleteLoading(false),
     );
   };
 
@@ -240,6 +243,7 @@ export default function ReportSchedule() {
         icon="fa-solid fa-trash"
         confirmLabel="Xoá"
         confirmVariant="danger"
+        loading={confirmDeleteLoading}
         onConfirm={() => {
           if (confirmDelete.id) handleDelete(confirmDelete.id);
           setConfirmDelete({ open: false, id: null });

@@ -68,6 +68,7 @@ export default function ReportsUpLoad() {
   const [loading, setLoading] = useState(true);
   const [loadingReports, setLoadingReports] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [downloading, setDownloading] = useState<number | null>(null);
 
   usePageHeader({
     title: 'Nộp báo cáo',
@@ -421,7 +422,9 @@ export default function ReportsUpLoad() {
                                       variant="outline"
                                       size="sm"
                                       icon="fa-solid fa-download"
-                                      onClick={() => handleDownload(reportId)}
+                                      loading={downloading === reportId}
+                                      disabled={downloading === reportId}
+                                      onClick={async () => { setDownloading(reportId); try { await handleDownload(reportId); } finally { setDownloading(null); } }}
                                     >
                                       Tải xuống
                                     </Button>

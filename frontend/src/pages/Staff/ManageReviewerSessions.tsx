@@ -60,6 +60,9 @@ export default function ManageReviewerSessions() {
   const [registrationsLoading, setRegistrationsLoading] = useState(false);
   const [selectedRegistrationIds, setSelectedRegistrationIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [patching, setPatching] = useState(false);
+  const [deletingLoading, setDeletingLoading] = useState(false);
   const [detailSession, setDetailSession] = useState<ReviewerAssignmentDetail | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
   const [isEditing, setIsEditing] = useState(false);
@@ -195,6 +198,7 @@ export default function ManageReviewerSessions() {
       defense_date: toLocalISOString(form.defense_date),
       location: form.location,
     };
+    setSubmitting(true);
     await createWithAuth(
       endpoints.reviewerSessions(selectedPeriodId),
       body,
@@ -208,11 +212,13 @@ export default function ManageReviewerSessions() {
       (_type: string, msg: string) => {
         toast.error('Lỗi', msg || 'Không thể tạo đợt phản biện.');
       },
+      () => setSubmitting(false),
     );
   };
 
   const handleDelete = async () => {
     if (!confirmDelete.id) return;
+    setDeletingLoading(true);
     await deleteWithAuth(
       endpoints.reviewerSessionDetail(selectedPeriodId, confirmDelete.id),
       () => {
@@ -228,11 +234,13 @@ export default function ManageReviewerSessions() {
         toast.error('Lỗi', msg || 'Không thể xoá đợt phản biện.');
         setConfirmDelete({ open: false, id: null });
       },
+      () => setDeletingLoading(false),
     );
   };
 
   const handlePatch = async (id: number, data: { defense_date?: string; location?: string }) => {
     const { updatePatchWithAuth } = await import('../../utils/ApiHelper');
+    setPatching(true);
     await updatePatchWithAuth(
       endpoints.reviewerSessionDetail(selectedPeriodId, id),
       data,
@@ -240,10 +248,12 @@ export default function ManageReviewerSessions() {
         setSessions((prev) => prev.map((s) => s.id === id ? { ...s, ...updated } : s));
         if (selectedId === id) loadDetailSession(id);
         toast.success('Cập nhật thành công');
+        setIsEditing(false);
       },
       (_type: string, msg: string) => {
         toast.error('Lỗi', msg || 'Không thể cập nhật.');
       },
+      () => setPatching(false),
     );
   };
 
@@ -439,7 +449,7 @@ export default function ManageReviewerSessions() {
 
                 <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
                   <Button variant="outline" size="sm" onClick={resetForm}>Hủy</Button>
-                  <Button variant="primary" size="sm" icon="fa-solid fa-check" onClick={handleCreate}>Tạo đợt phản biện</Button>
+                  <Button variant="primary" size="sm" icon="fa-solid fa-check" onClick={handleCreate} loading={submitting} disabled={submitting}>Tạo đợt phản biện</Button>
                 </div>
               </div>
             </SectionCard>
@@ -508,6 +518,8 @@ export default function ManageReviewerSessions() {
                         variant="primary"
                         size="sm"
                         icon="fa-solid fa-check"
+                        loading={patching}
+                        disabled={patching}
                         onClick={() => {
                           if (detailSession?.id) {
                             const toLocalISOString = (dtLocal: string) => {
@@ -519,7 +531,6 @@ export default function ManageReviewerSessions() {
                               return dtLocal + ':00' + sign + h + ':' + m;
                             };
                             handlePatch(detailSession.id, { ...editForm, defense_date: toLocalISOString(editForm.defense_date) });
-                            setIsEditing(false);
                           }
                         }}
                       >
@@ -557,6 +568,7 @@ export default function ManageReviewerSessions() {
         description="Bạn có chắc chắn muốn xoá đợt phản biện này? Tất cả phân công liên quan sẽ bị xoá."
         confirmLabel="Xoá"
         confirmVariant="danger"
+        loading={deletingLoading}
       />
     </div>
   );

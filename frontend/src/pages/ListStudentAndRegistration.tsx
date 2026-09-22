@@ -49,6 +49,8 @@ export default function ListStudentsAndRegistration() {
   const [periodsLoading, setPeriodsLoading] = useState(true);
   const [assignLoading, setAssignLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
   const { search, setSearch, searchParams } = useSearch();
   const [statusFilter, setStatusFilter] = useState('');
   const [assigningReg, setAssigningReg] = useState<Registration | null>(null);
@@ -77,6 +79,7 @@ export default function ListStudentsAndRegistration() {
   const [thesisRegistrations, setThesisRegistrations] = useState<Registration[]>([]);
   const [selectedThesisIds, setSelectedThesisIds] = useState<number[]>([]);
   const [convertLoading, setConvertLoading] = useState(false);
+  const [bulkAssignLoading, setBulkAssignLoading] = useState(false);
 
   usePageHeader({
     title: 'Danh sách Sinh viên & Đăng ký',
@@ -192,21 +195,25 @@ export default function ListStudentsAndRegistration() {
   };
 
   const handleApprove = async (id: number) => {
+    setApproving(true);
     await updatePatchWithAuth(endpoints.approveRegistration(selectedPeriodId, id), {}, () => {
       loadRegistrations();
       toast.success('Đã duyệt đăng ký', 'Đăng ký của sinh viên đã được duyệt.');
+      closeModal();
     }, (type: string, msg: string) => {
       toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
-    });
+    }, () => setApproving(false));
   };
 
   const handleReject = async (id: number) => {
+    setRejecting(true);
     await updatePatchWithAuth(endpoints.rejectRegistration(selectedPeriodId, id), {}, () => {
       loadRegistrations();
       toast.success('Đã từ chối đăng ký', 'Đăng ký của sinh viên đã bị từ chối.');
+      closeModal();
     }, (type: string, msg: string) => {
       toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
-    });
+    }, () => setRejecting(false));
   };
 
   const addLecturer = async (id: number, onSuccess?: () => void) => {
@@ -333,15 +340,15 @@ export default function ListStudentsAndRegistration() {
           <div className="flex items-center gap-2">
             {hasPendingApproval && isStudentRegistration && (
               <>
-                <Button variant="success" size="sm" icon="fa-solid fa-check" onClick={() => { handleApprove(reg.id); closeModal(); }}>
+                <Button variant="success" size="sm" icon="fa-solid fa-check" onClick={() => handleApprove(reg.id)} loading={approving} disabled={approving}>
                   Duyệt
                 </Button>
-                <Button variant="danger" size="sm" icon="fa-solid fa-xmark" onClick={() => { handleReject(reg.id); closeModal(); }}>
+                <Button variant="danger" size="sm" icon="fa-solid fa-xmark" onClick={() => handleReject(reg.id)} loading={rejecting} disabled={rejecting}>
                   Từ chối
                 </Button>
               </>
             )}
-            <Button variant="outline" size="sm" onClick={closeModal}>Đóng</Button>
+            <Button variant="outline" size="sm" onClick={closeModal} disabled={approving || rejecting}>Đóng</Button>
           </div>
         ),
       });
@@ -364,9 +371,11 @@ export default function ListStudentsAndRegistration() {
 
   const handleAddLecturers = async () => {
     const ids = [...selectedIds];
+    setBulkAssignLoading(true);
     await Promise.all(ids.map((id) => addLecturer(id)));
     loadRegistrations();
     toast.success('Phân giảng viên thành công', `Đã phân giảng viên cho ${ids.length} sinh viên.`);
+    setBulkAssignLoading(false);
   };
 
   const showCheckbox =
@@ -648,7 +657,7 @@ export default function ListStudentsAndRegistration() {
                   )}
                 </div>
                 <div className="flex justify-end overflow-x-auto">
-                  <Button variant="primary" icon="fa-solid fa-rotate" onClick={handleAddLecturers} loading={loading}>
+                  <Button variant="primary" icon="fa-solid fa-rotate" onClick={handleAddLecturers} loading={bulkAssignLoading} disabled={bulkAssignLoading}>
                     Phân giảng viên hướng dẫn
                   </Button>
                 </div>

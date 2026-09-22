@@ -49,6 +49,7 @@ export default function RegistrationPeriodManagement() {
     type: 'publish' | 'delete' | null;
     id: number | null;
   }>({ type: null, id: null });
+  const [confirmLoading, setConfirmLoading] = useState(false);
 
   usePageHeader({
     title: 'Quản lý đợt đăng ký',
@@ -128,6 +129,7 @@ export default function RegistrationPeriodManagement() {
   };
 
   const handlePublish = async (id: number) => {
+    setConfirmLoading(true);
     await createWithAuth(
       endpoints.publishPeriod(id),
       {},
@@ -139,11 +141,13 @@ export default function RegistrationPeriodManagement() {
       (_type: string, msg: string) => {
         toast.error('Lỗi', msg || 'Không thể công bố đợt.');
       },
+      () => setConfirmLoading(false),
     );
   };
 
   const handleDelete = async (id: number) => {
     const p = periods.find((x) => x.id === id);
+    setConfirmLoading(true);
     await deleteWithAuth(
       endpoints.registrationPeriodDetail(id),
       () => {
@@ -157,6 +161,7 @@ export default function RegistrationPeriodManagement() {
       (_type: string, msg: string) => {
         toast.error('Lỗi', msg || 'Không thể xoá đợt.');
       },
+      () => setConfirmLoading(false),
     );
   };
 
@@ -330,6 +335,7 @@ export default function RegistrationPeriodManagement() {
         confirmVariant={confirmState.type === 'publish' ? 'primary' : 'danger'}
         onConfirm={handleConfirm}
         onCancel={() => setConfirmState({ type: null, id: null })}
+        loading={confirmLoading}
       />
     </div>
   );

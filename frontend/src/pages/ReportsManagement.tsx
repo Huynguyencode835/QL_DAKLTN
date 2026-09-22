@@ -46,7 +46,7 @@ export default function ReportsManagement() {
             (data: Schedules[]) => setSchedules(data),
             () => {},
             {},
-            () => setSchedulesLoading(false)
+            setSchedulesLoading,
         );
     };
 
@@ -187,7 +187,7 @@ export default function ReportsManagement() {
                     onRefresh={() => loadReportsMatrix(selectedScheduleId)}
                     refreshLoading={loading}
                 />
-                <GenericTable rows={reportsMatrix.rows} columns={columns} rowKey={(row) => row.id} />
+                <GenericTable rows={reportsMatrix.rows} columns={columns} rowKey={(row) => row.id} loading={loading} />
                 <Pagination {...paginationProps} />
             </div>
         </main>

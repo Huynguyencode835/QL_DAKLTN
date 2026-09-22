@@ -124,13 +124,12 @@ export default function ListStudentsAndRegistration() {
   }, [activeTab, selectedThesisPeriodId, paginationParams.page]);
 
   const loadPeriods = async () => {
-    setPeriodsLoading(true);
     await fetchWithAuth(
       endpoints.registrationPeriods,
       (data: RegistrationPeriod[]) => setRegistrationPeriods(data),
       () => { },
       { period_type: periodTypeFilter || undefined },
-      () => setPeriodsLoading(false)
+      setPeriodsLoading,
     );
   };
 
@@ -140,7 +139,6 @@ export default function ListStudentsAndRegistration() {
 
   const loadRegistrations = async () => {
     if (!selectedPeriodId) return;
-    setLoading(true);
     await fetchWithAuth(
       endpoints.registrations(selectedPeriodId),
       (data: Registration[], paginatedData?: { count: number }) => {
@@ -148,7 +146,7 @@ export default function ListStudentsAndRegistration() {
       },
       () => { },
       { ...paginationParams, ...searchParams, status: statusFilter || undefined },
-      () => setLoading(false)
+      setLoading,
     );
   };
 
@@ -159,7 +157,6 @@ export default function ListStudentsAndRegistration() {
   };
 
   const loadThesisRegistrations = async (parentPeriodId: string) => {
-    setLoading(true);
     await fetchWithAuth(
       endpoints.registrationsThesis(parentPeriodId),
       (data: Registration[], paginatedData?: { count: number }) => {
@@ -169,13 +166,12 @@ export default function ListStudentsAndRegistration() {
         toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
       },
       paginationParams,
-      () => setLoading(false)
+      setLoading,
     );
   };
 
   const handleConvertToThesis = async () => {
     if (selectedThesisIds.length === 0 || !selectedThesisPeriodId) return;
-    setConvertLoading(true);
     await createWithAuth(
       endpoints.convertToThesis(selectedThesisPeriodId),
       { registration_ids: selectedThesisIds },
@@ -190,30 +186,28 @@ export default function ListStudentsAndRegistration() {
       (type: string, msg: string) => {
         toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
       },
-      () => setConvertLoading(false)
+      setConvertLoading,
     );
   };
 
   const handleApprove = async (id: number) => {
-    setApproving(true);
     await updatePatchWithAuth(endpoints.approveRegistration(selectedPeriodId, id), {}, () => {
       loadRegistrations();
       toast.success('Đã duyệt đăng ký', 'Đăng ký của sinh viên đã được duyệt.');
       closeModal();
     }, (type: string, msg: string) => {
       toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
-    }, () => setApproving(false));
+    }, setApproving);
   };
 
   const handleReject = async (id: number) => {
-    setRejecting(true);
     await updatePatchWithAuth(endpoints.rejectRegistration(selectedPeriodId, id), {}, () => {
       loadRegistrations();
       toast.success('Đã từ chối đăng ký', 'Đăng ký của sinh viên đã bị từ chối.');
       closeModal();
     }, (type: string, msg: string) => {
       toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
-    }, () => setRejecting(false));
+    }, setRejecting);
   };
 
   const addLecturer = async (id: number, onSuccess?: () => void) => {
@@ -626,10 +620,6 @@ export default function ListStudentsAndRegistration() {
                 <i className="fa-solid fa-calendar-week text-4xl mb-3"></i>
                 <p className="text-sm font-medium">Vui lòng chọn đợt đăng ký</p>
               </div>
-            ) : loading ? (
-              <div className="flex items-center justify-center py-12">
-                <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
-              </div>
             ) : (
               <>
                 <GenericTable
@@ -642,6 +632,7 @@ export default function ListStudentsAndRegistration() {
                   allSelected={allFilteredSelected}
                   onToggleSelect={(id) => toggleSelect(Number(id))}
                   onToggleSelectAll={toggleSelectAll}
+                  loading={loading}
                 />
                 <Pagination {...paginationProps} />
               </>
@@ -673,10 +664,6 @@ export default function ListStudentsAndRegistration() {
                 <i className="fa-solid fa-calendar-week text-4xl mb-3"></i>
                 <p className="text-sm font-medium">Vui lòng chọn đợt khóa luận</p>
               </div>
-            ) : loading ? (
-              <div className="flex items-center justify-center py-12">
-                <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
-              </div>
             ) : (
               <>
                 <GenericTable
@@ -698,6 +685,7 @@ export default function ListStudentsAndRegistration() {
                       setSelectedThesisIds((prev) => [...new Set([...prev, ...thesisRegistrations.map((r) => r.id)])]);
                     }
                   }}
+                  loading={loading}
                 />
                 <Pagination {...paginationProps} />
               </>

@@ -68,9 +68,11 @@ export function useReportDetail() {
   const { openModal, closeModal } = useModal();
   const toast = useToast();
   const [detailLoading, setDetailLoading] = useState(false);
+  const [downloadLoading, setDownloadLoading] = useState(false);
 
-  const handleDownload = (reportId: number) => {
-    fetchWithAuth(
+  const handleDownload = async (reportId: number) => {
+    setDownloadLoading(true);
+    await fetchWithAuth(
       endpoints.reportDownload(reportId),
       (data: any) => {
         if (data?.url) window.open(data.url, '_blank');
@@ -78,6 +80,8 @@ export function useReportDetail() {
       (type: string, msg: string) => {
         toast.error('Không thể tải file', msg);
       },
+      {},
+      setDownloadLoading,
     );
   };
 
@@ -141,7 +145,7 @@ export function useReportDetail() {
               <Button variant="outline" size="sm" onClick={closeModal}>
                 Đóng
               </Button>
-              <Button variant="primary" size="sm" icon="fa-solid fa-download" onClick={() => handleDownload(data.id)}>
+              <Button variant="primary" size="sm" icon="fa-solid fa-download" onClick={() => handleDownload(data.id)} loading={downloadLoading} disabled={downloadLoading}>
                 Tải xuống
               </Button>
             </>
@@ -156,5 +160,5 @@ export function useReportDetail() {
     );
   };
 
-  return { openDetail, handleDownload, detailLoading };
+  return { openDetail, handleDownload, detailLoading, downloadLoading };
 }

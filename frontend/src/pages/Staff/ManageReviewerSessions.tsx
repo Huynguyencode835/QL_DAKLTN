@@ -64,6 +64,7 @@ export default function ManageReviewerSessions() {
   const [patching, setPatching] = useState(false);
   const [deletingLoading, setDeletingLoading] = useState(false);
   const [detailSession, setDetailSession] = useState<ReviewerAssignmentDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<{ defense_date: string; location: string }>({ defense_date: '', location: '' });
@@ -99,7 +100,7 @@ export default function ManageReviewerSessions() {
       (data: RegistrationPeriod[]) => setPeriods(data),
       () => {},
       { period_type: 'thesis' },
-      () => setPeriodsLoading(false)
+      setPeriodsLoading,
     );
   };
 
@@ -124,11 +125,11 @@ export default function ManageReviewerSessions() {
       (data: ReviewerAssignmentDetail) => setDetailSession(data),
       () => {},
       {},
+      setDetailLoading,
     );
   };
 
   const loadLecturers = async () => {
-    setLecturersLoading(true);
     await fetchWithAuth(
       endpoints.lecturers,
       (data: any) => {
@@ -137,12 +138,11 @@ export default function ManageReviewerSessions() {
       },
       () => {},
       {},
-      () => setLecturersLoading(false)
+      setLecturersLoading,
     );
   };
 
   const loadAvailableRegistrations = async (periodId: string, page: number) => {
-    setRegistrationsLoading(true);
     await fetchWithAuth(
       endpoints.reviewerEligibleRegistrations(periodId),
       (data: any, paginatedData?: { count: number }) => {
@@ -152,7 +152,7 @@ export default function ManageReviewerSessions() {
       },
       () => {},
       { page },
-      () => setRegistrationsLoading(false)
+      setRegistrationsLoading,
     );
   };
 
@@ -198,7 +198,6 @@ export default function ManageReviewerSessions() {
       defense_date: toLocalISOString(form.defense_date),
       location: form.location,
     };
-    setSubmitting(true);
     await createWithAuth(
       endpoints.reviewerSessions(selectedPeriodId),
       body,
@@ -212,13 +211,12 @@ export default function ManageReviewerSessions() {
       (_type: string, msg: string) => {
         toast.error('Lỗi', msg || 'Không thể tạo đợt phản biện.');
       },
-      () => setSubmitting(false),
+      setSubmitting,
     );
   };
 
   const handleDelete = async () => {
     if (!confirmDelete.id) return;
-    setDeletingLoading(true);
     await deleteWithAuth(
       endpoints.reviewerSessionDetail(selectedPeriodId, confirmDelete.id),
       () => {
@@ -234,13 +232,12 @@ export default function ManageReviewerSessions() {
         toast.error('Lỗi', msg || 'Không thể xoá đợt phản biện.');
         setConfirmDelete({ open: false, id: null });
       },
-      () => setDeletingLoading(false),
+      setDeletingLoading,
     );
   };
 
   const handlePatch = async (id: number, data: { defense_date?: string; location?: string }) => {
     const { updatePatchWithAuth } = await import('../../utils/ApiHelper');
-    setPatching(true);
     await updatePatchWithAuth(
       endpoints.reviewerSessionDetail(selectedPeriodId, id),
       data,
@@ -253,7 +250,7 @@ export default function ManageReviewerSessions() {
       (_type: string, msg: string) => {
         toast.error('Lỗi', msg || 'Không thể cập nhật.');
       },
-      () => setPatching(false),
+      setPatching,
     );
   };
 
@@ -459,6 +456,10 @@ export default function ManageReviewerSessions() {
               mainText="Chọn một đợt phản biện từ danh sách bên trái"
               subText='hoặc bấm "Tạo đợt phản biện" để tạo mới'
             />
+          ) : detailLoading && !detailSession ? (
+            <div className="flex items-center justify-center py-20">
+              <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
+            </div>
           ) : (
             <div className="space-y-6">
               <DetailHeader
@@ -553,6 +554,7 @@ export default function ManageReviewerSessions() {
                   columns={assignmentColumns}
                   rowKey={(row) => String(row.registration_id)}
                   emptyText="Chưa có đề tài nào được giao"
+                  loading={detailLoading}
                 />
               </SectionCard>
             </div>

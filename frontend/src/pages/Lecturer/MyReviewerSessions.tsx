@@ -55,7 +55,7 @@ export default function MyReviewerSessions() {
       (data: RegistrationPeriod[]) => setPeriods(data),
       () => {},
       { period_type: 'thesis' },
-      () => setPeriodsLoading(false)
+      setPeriodsLoading,
     );
   };
 
@@ -152,21 +152,14 @@ export default function MyReviewerSessions() {
           refreshLoading={loading}
         />
 
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
-          </div>
-        ) : (
-          <>
-            <GenericTable
-              rows={sessions}
-              columns={columns}
-              rowKey={(row) => row.id}
-              emptyText="Không có đợt phản biện nào"
-            />
-            <Pagination {...paginationProps} />
-          </>
-        )}
+        <GenericTable
+          rows={sessions}
+          columns={columns}
+          rowKey={(row) => row.id}
+          emptyText="Không có đợt phản biện nào"
+          loading={loading}
+        />
+        <Pagination {...paginationProps} />
       </div>
     </div>
   );

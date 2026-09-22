@@ -112,13 +112,12 @@ export default function ReviewerSessionDetail() {
   }, [myGrade?.id]);
 
   const loadSession = async () => {
-    setLoading(true);
     await fetchWithAuth(
       endpoints.reviewerSessionDetail(periodId, id!),
       (data: any) => setSession(data),
       () => { toast.error('Lỗi', 'Không thể tải đợt phản biện.'); navigate(-1); },
       {},
-      () => setLoading(false)
+      setLoading,
     );
   };
 

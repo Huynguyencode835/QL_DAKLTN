@@ -79,6 +79,7 @@ export default function CommitteeManagement() {
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [detailCommittee, setDetailCommittee] = useState<CommitteeDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const regPagination = usePagination({ pageSize: 8 });
 
   usePageHeader({
@@ -111,7 +112,7 @@ export default function CommitteeManagement() {
       (data: RegistrationPeriod[]) => setPeriods(data),
       () => {},
       {},
-      () => setPeriodsLoading(false)
+      setPeriodsLoading,
     );
   };
 
@@ -136,11 +137,11 @@ export default function CommitteeManagement() {
       (data: CommitteeDetail) => setDetailCommittee(data),
       () => {},
       {},
+      setDetailLoading,
     );
   };
 
   const loadLecturers = async () => {
-    setLecturersLoading(true);
     await fetchWithAuth(
       endpoints.lecturers,
       (data: any) => {
@@ -149,12 +150,11 @@ export default function CommitteeManagement() {
       },
       () => {},
       {},
-      () => setLecturersLoading(false)
+      setLecturersLoading,
     );
   };
 
   const loadAvailableRegistrations = async (periodId: string, page: number) => {
-    setRegistrationsLoading(true);
     await fetchWithAuth(
       endpoints.registrations(periodId),
       (data: any, paginatedData?: { count: number }) => {
@@ -164,7 +164,7 @@ export default function CommitteeManagement() {
       },
       () => {},
       { page, has_final_report: 'true', no_committee: 'true' },
-      () => setRegistrationsLoading(false)
+      setRegistrationsLoading,
     );
   };
 
@@ -218,7 +218,6 @@ export default function CommitteeManagement() {
       members: validMembers.map((m) => ({ lecturer: Number(m.lecturer), role: m.role })),
       registrations: selectedRegistrationIds,
     };
-    setSubmitting(true);
     await createWithAuth(
       endpoints.committees(selectedPeriodId),
       body,
@@ -230,13 +229,12 @@ export default function CommitteeManagement() {
         toast.success('Tạo hội đồng thành công', `Hội đồng "${data.name}" đã được tạo.`);
       },
       (_type: string, msg: string) => toast.error('Lỗi', msg || 'Không thể tạo hội đồng.'),
-      () => setSubmitting(false),
+      setSubmitting,
     );
   };
 
   const handleDelete = async (id: number) => {
     const c = committees.find((x) => x.id === id);
-    setDeleting(true);
     await deleteWithAuth(
       endpoints.committeeDetail(selectedPeriodId, id),
       () => {
@@ -245,7 +243,7 @@ export default function CommitteeManagement() {
         toast.success('Đã xoá hội đồng', `Hội đồng "${c?.name}" đã bị xoá.`);
       },
       (_type: string, msg: string) => toast.error('Lỗi', msg || 'Không thể xoá hội đồng.'),
-      () => setDeleting(false),
+      setDeleting,
     );
   };
 
@@ -362,6 +360,10 @@ export default function CommitteeManagement() {
             </SectionCard>
           ) : !selectedCommittee ? (
             <EmptyDetailState mainText="Chọn một hội đồng từ danh sách bên trái" subText='hoặc bấm "Tạo hội đồng" để tạo mới' />
+          ) : detailLoading && !detailCommittee ? (
+            <div className="flex items-center justify-center py-20">
+              <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
+            </div>
           ) : (
             <div className="space-y-6">
               <DetailHeader
@@ -380,10 +382,10 @@ export default function CommitteeManagement() {
                 ]} />
               </SectionCard>
               <SectionCard title="Thành viên hội đồng" icon="fa-solid fa-user-group">
-                <GenericTable rows={detailCommittee?.members_detail || []} columns={memberColumns} rowKey={(row) => row.id} emptyText="Chưa có thành viên" />
+                <GenericTable rows={detailCommittee?.members_detail || []} columns={memberColumns} rowKey={(row) => row.id} emptyText="Chưa có thành viên" loading={detailLoading} />
               </SectionCard>
               <SectionCard title="Danh sách đề tài được giao" icon="fa-solid fa-file-lines">
-                <GenericTable rows={detailCommittee?.registrations_detail || []} columns={regColumns} rowKey={(row) => row.id} emptyText="Chưa có đề tài nào được giao" />
+                <GenericTable rows={detailCommittee?.registrations_detail || []} columns={regColumns} rowKey={(row) => row.id} emptyText="Chưa có đề tài nào được giao" loading={detailLoading} />
               </SectionCard>
             </div>
           )

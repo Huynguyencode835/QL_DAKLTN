@@ -715,20 +715,13 @@ export default function CommitteeDetail() {
 
               {/* Bảng điểm thành viên hội đồng */}
               <SectionCard title="Bảng điểm thành viên hội đồng" icon="fa-solid fa-chart-column">
-                {loadingReg ? (
-                  <div className="flex justify-center py-6">
-                    <i className="fa-solid fa-circle-notch animate-spin text-primary text-xl"></i>
-                  </div>
-                ) : currentGradeData?.committee_members?.length ? (
-                  <GenericTable
-                    rows={currentGradeData.committee_members}
-                    columns={committeeGradeColumns}
-                    rowKey={(row) => row.id}
-                    emptyText="Chưa có điểm"
-                  />
-                ) : (
-                  <p className="text-sm text-gray-400 text-center py-4">Chưa có thành viên hội đồng</p>
-                )}
+                <GenericTable
+                  rows={currentGradeData?.committee_members || []}
+                  columns={committeeGradeColumns}
+                  rowKey={(row) => row.id}
+                  emptyText="Chưa có thành viên hội đồng"
+                  loading={loadingReg}
+                />
               </SectionCard>
             </div>
           )}

@@ -90,7 +90,6 @@ export default function TopicManagement() {
   };
 
   const handleDelete = async (id: number) => {
-    setDeleting(true);
     await deleteWithAuth(
       endpoints.TopicDetail(id),
       () => {
@@ -100,7 +99,7 @@ export default function TopicManagement() {
       (type: string, msg: string) => {
         toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
       },
-      () => setDeleting(false),
+      setDeleting,
     );
   };
 
@@ -250,21 +249,14 @@ export default function TopicManagement() {
           </div>
         </Card>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
-            </div>
-          ) : (
-            <>
-              <GenericTable
-                rows={topics}
-                columns={columns}
-                rowKey={(topic) => topic.id}
-                emptyText={search || difficultyFilter ? 'Không tìm thấy đề tài phù hợp' : 'Chưa có đề tài nào'}
-              />
-              <Pagination {...paginationProps} />
-            </>
-          )}
+          <GenericTable
+            rows={topics}
+            columns={columns}
+            rowKey={(topic) => topic.id}
+            emptyText={search || difficultyFilter ? 'Không tìm thấy đề tài phù hợp' : 'Chưa có đề tài nào'}
+            loading={loading}
+          />
+          <Pagination {...paginationProps} />
       </div>
 
       {formModalOpen && (

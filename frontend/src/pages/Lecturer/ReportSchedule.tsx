@@ -53,12 +53,11 @@ export default function ReportSchedule() {
       (data: RegistrationPeriod[]) => setPeriods(data),
       () => {},
       {},
-      () => setPeriodsLoading(false)
+      setPeriodsLoading,
     );
   };
 
   const loadSchedules = async () => {
-    setLoading(true);
     await fetchWithAuth(
       endpoints.schedules(selectedPeriodId),
       (data: Schedules[]) => setSchedules(data),
@@ -66,7 +65,7 @@ export default function ReportSchedule() {
         toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
       },
       {},
-      () => setLoading(false)
+      setLoading,
     );
   };
 
@@ -79,7 +78,6 @@ export default function ReportSchedule() {
   const selectedSchedule = schedules.find((s) => s.id === selectedId) || null;
 
   const handleCreate = async (body: Record<string, any>) => {
-    setSubmitting(true);
     await createWithAuth(
       endpoints.schedules(selectedPeriodId),
       body,
@@ -91,13 +89,12 @@ export default function ReportSchedule() {
       (type: string, msg: string) => {
         toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
       },
-      () => setSubmitting(false)
+      setSubmitting,
     );
   };
 
   const handleEdit = async (body: Record<string, any>) => {
     if (!editingSchedule) return;
-    setSubmitting(true);
     await updatePatchWithAuth(
       endpoints.scheduleItem(editingSchedule.id),
       body,
@@ -109,13 +106,12 @@ export default function ReportSchedule() {
       (type: string, msg: string) => {
         toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
       },
-      () => setSubmitting(false)
+      setSubmitting,
     );
   };
 
   const handleDelete = async (id: number) => {
     const s = schedules.find((x) => x.id === id);
-    setConfirmDeleteLoading(true);
     await deleteWithAuth(
       endpoints.scheduleItem(id),
       () => {
@@ -126,7 +122,7 @@ export default function ReportSchedule() {
       (type: string, msg: string) => {
         toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
       },
-      () => setConfirmDeleteLoading(false),
+      setConfirmDeleteLoading,
     );
   };
 

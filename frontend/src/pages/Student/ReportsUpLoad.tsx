@@ -140,7 +140,7 @@ export default function ReportsUpLoad() {
         setMatrixReports({});
       },
       {},
-      () => setLoadingReports(false),
+      setLoadingReports,
     );
   };
 
@@ -159,7 +159,7 @@ export default function ReportsUpLoad() {
       (data: Schedules[]) => setSchedules(data),
       () => setSchedules([]),
       {},
-      () => setLoadingSchedules(false),
+      setLoadingSchedules,
     );
   }, [registration, form.report_type]);
 

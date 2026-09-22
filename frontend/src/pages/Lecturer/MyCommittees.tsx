@@ -59,7 +59,7 @@ export default function MyCommittees() {
       (data: RegistrationPeriod[]) => setPeriods(data),
       () => {},
       {},
-      () => setPeriodsLoading(false)
+      setPeriodsLoading,
     );
   };
 
@@ -195,21 +195,14 @@ export default function MyCommittees() {
           refreshLoading={loading}
         />
 
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
-          </div>
-        ) : (
-          <>
-            <GenericTable
-              rows={committees}
-              columns={columns}
-              rowKey={(row) => row.id}
-              emptyText="Không có hội đồng nào"
-            />
-            <Pagination {...paginationProps} />
-          </>
-        )}
+        <GenericTable
+          rows={committees}
+          columns={columns}
+          rowKey={(row) => row.id}
+          emptyText="Không có hội đồng nào"
+          loading={loading}
+        />
+        <Pagination {...paginationProps} />
       </div>
     </div>
   );

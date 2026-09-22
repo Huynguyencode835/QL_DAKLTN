@@ -75,7 +75,7 @@ export default function MyDefenseSchedules() {
       (data: CommitteeItem[]) => setCommittees(data),
       () => toast.error('Lỗi', 'Không thể tải danh sách hội đồng.'),
       {},
-      () => setLoading(false)
+      setLoading,
     );
   };
 
@@ -88,31 +88,29 @@ export default function MyDefenseSchedules() {
       (data: ReviewerSessionItem[]) => setSessions(data),
       () => toast.error('Lỗi', 'Không thể tải danh sách phản biện.'),
       {},
-      () => setLoading(false)
+      setLoading,
     );
   };
 
   const loadCommitteeDetail = async (id: number) => {
-    setLoadingDetail(true);
     setDetail(null);
     await fetchWithAuth(
       endpoints.myCommitteeDetail(id),
       (data: any) => setDetail(data),
       () => toast.error('Lỗi', 'Không thể tải chi tiết hội đồng.'),
       {},
-      () => setLoadingDetail(false)
+      setLoadingDetail,
     );
   };
 
   const loadSessionDetail = async (id: number) => {
-    setLoadingDetail(true);
     setDetail(null);
     await fetchWithAuth(
       endpoints.myReviewerSessionDetail(id),
       (data: any) => setDetail(data),
       () => toast.error('Lỗi', 'Không thể tải chi tiết phản biện.'),
       {},
-      () => setLoadingDetail(false)
+      setLoadingDetail,
     );
   };
 

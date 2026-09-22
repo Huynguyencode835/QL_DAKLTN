@@ -14,6 +14,7 @@ interface GenericTableProps<T> {
   columns: TableColumn<T>[];
   rowKey: (row: T) => string | number;
   emptyText?: string;
+  loading?: boolean;
 
   // Checkbox chọn dòng - optional
   selectable?: boolean;
@@ -28,12 +29,23 @@ export default function GenericTable<T>({
   columns,
   rowKey,
   emptyText = 'Không có dữ liệu',
+  loading = false,
   selectable = false,
   selectedIds = [],
   allSelected = false,
   onToggleSelect,
   onToggleSelectAll,
 }: GenericTableProps<T>) {
+  if (loading) {
+    return (
+      <div className="overflow-hidden rounded-2xl border border-gray-100 shadow-sm bg-white">
+        <div className="flex items-center justify-center py-16">
+          <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div >
       <div className="overflow-hidden rounded-2xl border border-gray-100 shadow-sm bg-white">

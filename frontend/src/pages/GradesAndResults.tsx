@@ -66,7 +66,6 @@ function LecturerGradeView({ readonly = false }: { readonly?: boolean }) {
   };
 
   const loadGrades = async () => {
-    setLoading(true);
     const params: Record<string, any> = { ...paginationParams, ...searchParams };
     if (selectedPeriodId !== 'current-project' && selectedPeriodId !== 'current-thesis') {
       params.period = selectedPeriodId;
@@ -88,7 +87,7 @@ function LecturerGradeView({ readonly = false }: { readonly?: boolean }) {
         toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
       },
       params,
-      () => setLoading(false)
+      setLoading,
     );
   };
 
@@ -154,16 +153,15 @@ function LecturerGradeView({ readonly = false }: { readonly?: boolean }) {
       toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
     };
 
-    setSaving(true);
     if (row.process_grade_id) {
-      await updatePatchWithAuth(endpoints.gradeDetail(row.process_grade_id), body, onSuccess, onError, () => setSaving(false));
+      await updatePatchWithAuth(endpoints.gradeDetail(row.process_grade_id), body, onSuccess, onError, setSaving);
     } else {
       await createWithAuth(endpoints.grades, body, (data: any) => {
         setGrades((prev) =>
           prev.map((r) => (r.id === rowId ? { ...r, process_grade_id: data.id } : r))
         );
         onSuccess();
-      }, onError, () => setSaving(false));
+      }, onError, setSaving);
     }
   };
 
@@ -207,16 +205,15 @@ function LecturerGradeView({ readonly = false }: { readonly?: boolean }) {
       toast.error(type === 'network' ? 'Lỗi mạng' : type === 'server' ? 'Lỗi máy chủ' : 'Lỗi', msg);
     };
 
-    setSaving(true);
     if (row?.final_grade_id) {
-      await updatePatchWithAuth(endpoints.gradeDetail(row.final_grade_id), body, onSuccess, onError, () => setSaving(false));
+      await updatePatchWithAuth(endpoints.gradeDetail(row.final_grade_id), body, onSuccess, onError, setSaving);
     } else {
       await createWithAuth(endpoints.grades, body, (data: any) => {
         setGrades((prev) =>
           prev.map((r) => (r.id === rowId ? { ...r, final_grade_id: data.id } : r))
         );
         onSuccess();
-      }, onError, () => setSaving(false));
+      }, onError, setSaving);
     }
   };
 
@@ -380,21 +377,14 @@ function LecturerGradeView({ readonly = false }: { readonly?: boolean }) {
           refreshLoading={loading}
         />
 
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <i className="fa-solid fa-circle-notch animate-spin text-primary text-2xl"></i>
-          </div>
-        ) : (
-          <>
-            <GenericTable
-              rows={grades}
-              columns={columns}
-              rowKey={(row) => row.id}
-              emptyText="Không có dữ liệu điểm"
-            />
-            <Pagination {...paginationProps} />
-          </>
-        )}
+        <GenericTable
+          rows={grades}
+          columns={columns}
+          rowKey={(row) => row.id}
+          emptyText="Không có dữ liệu điểm"
+          loading={loading}
+        />
+        <Pagination {...paginationProps} />
       </div>
     </div>
   );
@@ -431,7 +421,7 @@ function StudentGradeView() {
       },
       () => {},
       {},
-      () => setPeriodsLoading(false)
+      setPeriodsLoading,
     );
   };
 

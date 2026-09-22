@@ -39,6 +39,7 @@ export default function RegistrationPeriodManagement() {
   const [isCreating, setIsCreating] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [detailPeriod, setDetailPeriod] = useState<RegistrationPeriod | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
   const [periodTypeFilter, setPeriodTypeFilter] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -74,6 +75,7 @@ export default function RegistrationPeriodManagement() {
       (data: RegistrationPeriod) => setDetailPeriod(data),
       () => {},
       {},
+      setDetailLoading,
     );
   };
 
@@ -90,7 +92,6 @@ export default function RegistrationPeriodManagement() {
   const selectedPeriod = periods.find((p) => p.id === selectedId) || null;
 
   const handleCreate = async (body: Record<string, any>) => {
-    setSubmitting(true);
     await createWithAuth(
       endpoints.registrationPeriods,
       body,
@@ -103,13 +104,12 @@ export default function RegistrationPeriodManagement() {
       (_type: string, msg: string) => {
         toast.error('Lỗi', msg || 'Không thể tạo đợt.');
       },
-      () => setSubmitting(false),
+      setSubmitting,
     );
   };
 
   const handleEdit = async (body: Record<string, any>) => {
     if (!editingId) return;
-    setSubmitting(true);
     await updatePatchWithAuth(
       endpoints.registrationPeriodDetail(editingId),
       body,
@@ -124,12 +124,11 @@ export default function RegistrationPeriodManagement() {
       (_type: string, msg: string) => {
         toast.error('Lỗi', msg || 'Không thể cập nhật đợt.');
       },
-      () => setSubmitting(false),
+      setSubmitting,
     );
   };
 
   const handlePublish = async (id: number) => {
-    setConfirmLoading(true);
     await createWithAuth(
       endpoints.publishPeriod(id),
       {},
@@ -141,13 +140,12 @@ export default function RegistrationPeriodManagement() {
       (_type: string, msg: string) => {
         toast.error('Lỗi', msg || 'Không thể công bố đợt.');
       },
-      () => setConfirmLoading(false),
+      setConfirmLoading,
     );
   };
 
   const handleDelete = async (id: number) => {
     const p = periods.find((x) => x.id === id);
-    setConfirmLoading(true);
     await deleteWithAuth(
       endpoints.registrationPeriodDetail(id),
       () => {
@@ -161,13 +159,12 @@ export default function RegistrationPeriodManagement() {
       (_type: string, msg: string) => {
         toast.error('Lỗi', msg || 'Không thể xoá đợt.');
       },
-      () => setConfirmLoading(false),
+      setConfirmLoading,
     );
   };
 
   const handleCreateThesis = async (body: Record<string, any>) => {
     if (!thesisParentId) return;
-    setSubmitting(true);
     await createWithAuth(
       endpoints.createThesis(thesisParentId),
       body,
@@ -181,7 +178,7 @@ export default function RegistrationPeriodManagement() {
       (_type: string, msg: string) => {
         toast.error('Lỗi', msg || 'Không thể tạo đợt khóa luận.');
       },
-      () => setSubmitting(false),
+      setSubmitting,
     );
   };
 
@@ -241,7 +238,11 @@ export default function RegistrationPeriodManagement() {
         <div className="lg:col-span-3">
           <Card variant="elevated" icon="fa-solid fa-calendar-days" title={`Đợt đăng ký (${filtered.length})`}>
             <div className="space-y-2 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
-              {filtered.length === 0 ? (
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <i className="fa-solid fa-circle-notch animate-spin text-primary text-xl"></i>
+                </div>
+              ) : filtered.length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-4">Không có đợt đăng ký nào</p>
               ) : (
                 filtered.map((p) => {
@@ -303,6 +304,11 @@ export default function RegistrationPeriodManagement() {
               <i className="fa-regular fa-hand-pointer text-5xl mb-4"></i>
               <p className="text-sm font-medium">Chọn một đợt đăng ký từ danh sách bên trái</p>
               <p className="text-xs text-gray-300 mt-1">hoặc bấm "Tạo đợt mới" để tạo mới</p>
+            </div>
+          ) : detailLoading ? (
+            <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-gray-100 shadow-sm">
+              <i className="fa-solid fa-circle-notch animate-spin text-primary text-xl mb-3"></i>
+              <p className="text-sm text-gray-400">Đang tải chi tiết...</p>
             </div>
           ) : (
             <PeriodDetail
